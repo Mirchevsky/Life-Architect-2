@@ -735,7 +735,7 @@ private fun CalendarConfirmPopup(onDismiss: () -> Unit) {
     ) {
         Text(
             text = "Added to Calendar",
-            color = Color(0xFF4CAF50),   // same green as XP gain
+            color = Purple,   // calendar purple — matches CalendarUpdatedPopup in TaskItem
             fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold,
             textAlign = TextAlign.Center,

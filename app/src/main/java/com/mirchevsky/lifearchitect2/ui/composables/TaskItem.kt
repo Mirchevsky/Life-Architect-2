@@ -1,12 +1,17 @@
 package com.mirchevsky.lifearchitect2.ui.composables
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -43,16 +48,23 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextRange
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupProperties
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
+import com.mirchevsky.lifearchitect2.ui.theme.Purple
 import java.time.Instant
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -67,11 +79,10 @@ import java.time.format.DateTimeFormatter
  * - **Tap card** (outside the title) → marks task complete.
  * - **Long-press card** OR **tap title** → inline title editing via [BasicTextField].
  *   Pressing Done on the keyboard commits the change via [onUpdate].
- * - **Calendar icon (tap)** → opens the device calendar app to view the event.
- *   Only shown when a due date is set.
- * - **Calendar icon (long-press)** → opens DatePicker → TimeInput flow to edit the
+ * - **Calendar icon (tap)** → opens DatePicker → TimeInput flow to edit the
  *   due date/time. On confirm, [onUpdateDueDate] is called with the old and new millis
- *   so the ViewModel can sync the device calendar correctly.
+ *   so the ViewModel can sync the device calendar correctly. Shows a "Calendar Updated"
+ *   popup after the change is confirmed.
  * - **Flag icon** → toggles [TaskEntity.isUrgent]. Filled red when urgent.
  * - **Pin icon** → toggles [TaskEntity.isPinned]. Filled amber when pinned.
  *
@@ -117,6 +128,9 @@ fun TaskItem(
     var showTimePicker by remember { mutableStateOf(false) }
     var pendingDateMillis by remember(task.id) { mutableStateOf(task.dueDate) }
 
+    // ── Calendar Updated popup ──────────────────────────────────────────────
+    var showCalendarUpdatedPopup by remember { mutableStateOf(false) }
+
     val todayMillis = remember {
         LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
     }
@@ -141,7 +155,7 @@ fun TaskItem(
         else          -> MaterialTheme.colorScheme.onSurface
     }
 
-    // ── Card ────────────────────────────────────────────────────────────────
+    // ── Card ────────────────────────────────────────────────────────────
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -206,7 +220,7 @@ fun TaskItem(
                 if (dueDate != null) {
                     val dateLabel = dueDate.format(DateTimeFormatter.ofPattern("MMM d"))
                     val timeLabel = dueDateTime.format(DateTimeFormatter.ofPattern("HH:mm"))
-                    val label = "$dateLabel · $timeLabel"
+                    val label = "$dateLabel, $timeLabel"
                     Text(
                         text  = if (isOverdue) "Overdue — $label" else label,
                         style = MaterialTheme.typography.bodySmall,
@@ -263,6 +277,16 @@ fun TaskItem(
                     modifier = Modifier.size(20.dp)
                 )
             }
+        }
+    }
+
+    // ── Calendar Updated popup — anchored to bottom of screen ────────────
+    if (showCalendarUpdatedPopup) {
+        Popup(
+            alignment = Alignment.BottomCenter,
+            properties = PopupProperties(focusable = false)
+        ) {
+            CalendarUpdatedPopup(onDismiss = { showCalendarUpdatedPopup = false })
         }
     }
 
@@ -323,10 +347,60 @@ fun TaskItem(
                                 .toInstant()
                                 .toEpochMilli()
                             onUpdateDueDate(task.dueDate, newMillis)
+                            showCalendarUpdatedPopup = true
                         }) { Text("Confirm") }
                     }
                 }
             }
         }
+    }
+}
+
+/**
+ * A floating "Calendar Updated" confirmation popup that animates upward and fades out,
+ * matching the style of the "Added to Calendar" popup in [AddTaskItem].
+ *
+ * The outer [Box] is 200 dp tall so the text (anchored at the bottom) can travel
+ * 120 dp upward without leaving the Popup window bounds and being clipped.
+ *
+ * @param onDismiss Called when the animation completes.
+ */
+@Composable
+private fun CalendarUpdatedPopup(onDismiss: () -> Unit) {
+    val yOffset = remember { Animatable(0f) }
+    val alpha   = remember { Animatable(1f) }
+
+    LaunchedEffect(Unit) {
+        yOffset.animateTo(
+            targetValue = -120f,
+            animationSpec = tween(durationMillis = 1500)
+        )
+        alpha.animateTo(
+            targetValue = 0f,
+            animationSpec = tween(durationMillis = 400)
+        )
+        onDismiss()
+    }
+
+    // Tall outer box: text starts at the bottom and travels upward within this window.
+    // Without this height the Popup window clips the text as soon as it moves above y=0.
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(200.dp),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Text(
+            text = "Calendar Updated",
+            color = Purple,
+            fontSize = 22.sp,
+            fontWeight = FontWeight.ExtraBold,
+            textAlign = TextAlign.Center,
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier
+                .offset(y = yOffset.value.dp)
+                .alpha(alpha.value)
+                .padding(16.dp)
+        )
     }
 }
