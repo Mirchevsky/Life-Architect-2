@@ -6,11 +6,11 @@ plugins {
 }
 
 android {
-    namespace = "io.lifephysics.architect2"
+    namespace = "com.mirchevsky.lifearchitect2"
     compileSdk = 35
 
     defaultConfig {
-        applicationId = "io.lifephysics.architect2"
+        applicationId = "com.mirchevsky.lifearchitect2"
         minSdk = 26
         targetSdk = 35
         versionCode = 1
