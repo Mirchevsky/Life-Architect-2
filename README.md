@@ -22,7 +22,6 @@ The application is in active development. The current feature set provides the c
 | **Leveling System** | ✅ Complete | Progress through ranks. |
 | **MVI Architecture** | ✅ Complete | A scalable and testable Model-View-Intent architecture. |
 | **Offline-First Storage** | ✅ Complete | All data is stored locally using RoomDB for instant access. |
-| **Goal Management** | 🚧 Planned | Group tasks under larger goals or migrate to other projects. |
 | **Analytics & Insights** | ✅ Complete | Visualize progress with charts and historical data. |
 | **Trending Feed** | ✅ Complete | A daily feed of trending topics . |
 | **Google Sign-In** | 🚧 Planned | Sync progress across devices with cloud backup. |
