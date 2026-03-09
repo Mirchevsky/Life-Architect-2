@@ -46,11 +46,19 @@
             TaskWidgetProvider — the BroadcastReceiver that orchestrates the
             task list home screen widget.
 
-            ACTION_WIDGET_REFRESH is sent by WidgetOverlayService after saving
-            a task, so the widget list updates immediately.
+            Uses the modern RemoteViews.RemoteCollectionItems API (API 31+)
+            instead of the deprecated RemoteViewsService pattern. The provider
+            builds and pushes the full RemoteViews — including the collection —
+            directly via AppWidgetManager.updateAppWidget(), so no separate
+            RemoteViewsService is needed.
+
+            ACTION_WIDGET_REFRESH is sent by MainViewModel (and
+            WidgetOverlayService) after any task mutation, triggering a full
+            widget rebuild on Dispatchers.IO inside the provider.
 
             ACTION_COMPLETE_TASK is sent when the user taps a task row on the
-            widget; the provider marks it done in Room and refreshes the list.
+            widget; the provider marks it done in Room and immediately rebuilds
+            the widget.
         -->
         <receiver
             android:name=".widget.TaskWidgetProvider"
@@ -66,20 +74,11 @@
         </receiver>
 
         <!--
-            TaskWidgetService — the RemoteViewsService that supplies row views
-            to the widget's ListView.
-
-            android:permission="android.permission.BIND_REMOTEVIEWS" prevents
-            other apps from binding to this service and reading task data.
+            NOTE: TaskWidgetService (RemoteViewsService) has been removed.
+            The widget now uses RemoteViews.RemoteCollectionItems, which does
+            not require a bound service. The BIND_REMOTEVIEWS permission is
+            no longer needed.
         -->
-        <service
-            android:name=".widget.TaskWidgetService"
-            android:exported="true"
-            android:permission="android.permission.BIND_REMOTEVIEWS">
-            <intent-filter>
-                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
-            </intent-filter>
-        </service>
 
         <!--
             WidgetOverlayService — ForegroundService that draws the slide-up

@@ -58,10 +58,13 @@ interface TaskDao {
      * exhausted — preventing the framework's loading-view timeout from firing and
      * leaving the widget stuck on "Loading…" rows.
      *
+     * Ordered to match the in-app task list: pinned first, then urgent,
+     * then by creation date descending.
+     *
      * @param userId The ID of the user whose pending tasks are to be fetched.
      * @return A list of pending [TaskEntity] for the user.
      */
-    @Query("SELECT * FROM tasks WHERE user_id = :userId AND is_completed = 0 ORDER BY created_at DESC")
+    @Query("SELECT * FROM tasks WHERE user_id = :userId AND is_completed = 0 ORDER BY is_pinned DESC, is_urgent DESC, created_at DESC")
     suspend fun getPendingTasksForUser(userId: String): List<TaskEntity>
 
     /**

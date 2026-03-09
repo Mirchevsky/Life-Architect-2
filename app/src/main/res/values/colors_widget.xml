@@ -13,8 +13,14 @@
     Place at: app/src/main/res/values/colors_widget.xml
 -->
 <resources>
-    <!-- Widget card background — near-white in light mode -->
+    <!-- Widget frame background — near-white in light mode -->
     <color name="widget_background">#F5F5F5</color>
+
+    <!-- Task row card background — slightly darker than frame in light mode -->
+    <color name="widget_item_card">#E8E8F0</color>
+
+    <!-- Checkbox stroke colour — dark at 40% opacity in light mode -->
+    <color name="widget_checkbox_stroke">#661C1C2E</color>
 
     <!-- Primary text (title, task names) — dark in light mode -->
     <color name="widget_text_primary">#1C1C2E</color>

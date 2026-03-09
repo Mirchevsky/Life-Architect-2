@@ -57,9 +57,11 @@ class TaskWidgetItemFactory(
     private val dueDateFormatter: DateTimeFormatter =
         DateTimeFormatter.ofPattern("MMM d, HH:mm")
 
-    private val colorUrgent  = Color.parseColor("#E53935")
-    private val colorPinned  = Color.parseColor("#F59E0B")
-    private val colorDefault = Color.parseColor("#33FFFFFF")
+    // Colours applied via RemoteViews.setInt(id, "setColorFilter", color)
+    // and RemoteViews.setTextColor(id, color).
+    private val colorUrgent  = Color.parseColor("#E53935")  // red
+    private val colorPinned  = Color.parseColor("#F59E0B")  // amber
+    private val colorDefault = Color.parseColor("#80FFFFFF") // muted white (dark mode)
 
     // ── Factory lifecycle ─────────────────────────────────────────────────────
 
@@ -89,10 +91,42 @@ class TaskWidgetItemFactory(
         val task = tasks[position]
         val rv = RemoteViews(context.packageName, R.layout.widget_task_item)
 
-        // Title
+        // ── Title ─────────────────────────────────────────────────────────────
         rv.setTextViewText(R.id.widget_item_title, task.title)
 
-        // Due date
+        // ── Title text colour + flag/pin icon visibility ───────────────────────
+        when {
+            task.isUrgent -> {
+                // Red text, red flag visible, pin hidden
+                rv.setTextColor(R.id.widget_item_title, colorUrgent)
+                rv.setViewVisibility(R.id.widget_item_flag, View.VISIBLE)
+                rv.setInt(R.id.widget_item_flag, "setColorFilter", colorUrgent)
+                rv.setViewVisibility(R.id.widget_item_pin, View.GONE)
+            }
+            task.isPinned -> {
+                // Amber text, pin visible, flag hidden
+                rv.setTextColor(R.id.widget_item_title, colorPinned)
+                rv.setViewVisibility(R.id.widget_item_pin, View.VISIBLE)
+                rv.setInt(R.id.widget_item_pin, "setColorFilter", colorPinned)
+                rv.setViewVisibility(R.id.widget_item_flag, View.GONE)
+            }
+            else -> {
+                // Default text colour, both icons hidden
+                rv.setTextColor(R.id.widget_item_title, Color.parseColor("#EEEEEE"))
+                rv.setViewVisibility(R.id.widget_item_flag, View.GONE)
+                rv.setViewVisibility(R.id.widget_item_pin, View.GONE)
+            }
+        }
+
+        // ── Checkbox tint ─────────────────────────────────────────────────────
+        val dotColor = when {
+            task.isUrgent -> colorUrgent
+            task.isPinned -> colorPinned
+            else          -> colorDefault
+        }
+        rv.setInt(R.id.widget_item_dot, "setColorFilter", dotColor)
+
+        // ── Due date ──────────────────────────────────────────────────────────
         val dueDate: Long? = task.dueDate
         if (dueDate != null) {
             val formatted = Instant.ofEpochMilli(dueDate)
@@ -104,19 +138,7 @@ class TaskWidgetItemFactory(
             rv.setViewVisibility(R.id.widget_item_due, View.GONE)
         }
 
-        // Status dot colour — prefer explicit flags, fall back to due-date proximity
-        val dotColor = when {
-            task.isUrgent -> colorUrgent
-            task.isPinned -> colorPinned
-            dueDate != null && (dueDate - System.currentTimeMillis()) < 86_400_000L -> colorUrgent
-            else -> colorDefault
-        }
-        rv.setInt(R.id.widget_item_dot, "setColorFilter", dotColor)
-
-        // Fill-in intent: carries the task ID back to TaskWidgetProvider
-        // when this row is tapped. The template PendingIntent (set on the
-        // ListView via setPendingIntentTemplate) carries the action and class;
-        // this fill-in intent only adds the task ID extra.
+        // ── Fill-in intent: carries task ID to TaskWidgetProvider on tap ──────
         val fillIn = Intent().apply {
             putExtra(TaskWidgetProvider.EXTRA_TASK_ID, task.id)
         }
@@ -146,13 +168,11 @@ class TaskWidgetItemFactory(
      * Synchronously loads pending tasks from Room using a direct one-shot
      * suspend query ([TaskDao.getPendingTasksForUser]).
      *
-     * We use the direct query instead of `observePendingTasksForUser(...).first()`
-     * because Flow collection adds overhead that can push [onDataSetChanged] past
-     * the framework's timeout, causing "Loading…" rows even when data is present.
+     * Ordered: pinned first, then urgent, then by creation date descending —
+     * matching the in-app task list sort order.
      *
-     * runBlocking is intentional and correct: the RemoteViewsFactory lifecycle
-     * methods are always invoked on a background thread by the AppWidgetService
-     * framework, so blocking that thread while Room returns data is expected.
+     * The app always uses "local_user" as the userId (no Google sign-in
+     * persists a different ID), so this is hardcoded for simplicity.
      */
     private fun loadTasks() {
         tasks = runBlocking {
@@ -167,5 +187,7 @@ class TaskWidgetItemFactory(
         RemoteViews(context.packageName, R.layout.widget_task_item).also { rv ->
             rv.setTextViewText(R.id.widget_item_title, "")
             rv.setViewVisibility(R.id.widget_item_due, View.GONE)
+            rv.setViewVisibility(R.id.widget_item_flag, View.GONE)
+            rv.setViewVisibility(R.id.widget_item_pin, View.GONE)
         }
 }

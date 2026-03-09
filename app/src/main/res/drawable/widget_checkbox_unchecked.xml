@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    widget_checkbox_unchecked.xml
+    ─────────────────────────────────────────────────────────────────────────
+    Rounded-square outline checkbox used as the task completion indicator
+    in each widget row.
+
+    MUST be a <vector> drawable, NOT a <shape>.
+    RemoteViews.setInt(id, "setColorFilter", color) works by calling
+    ImageView.setColorFilter(int) at runtime, which applies a PorterDuff
+    colour filter to the drawable. This only works on bitmap/vector
+    drawables — <shape> drawables bake the colour into XML and ignore the
+    filter entirely.
+
+    Default stroke colour uses @color/widget_checkbox_stroke:
+      Light mode: #661C1C2E (dark at 40% opacity)
+      Dark mode:  #80FFFFFF (white at 50% opacity)
+
+    TaskWidgetItemFactory overrides via setColorFilter() for urgent (red)
+    and pinned (amber) states.
+
+    Place at: app/src/main/res/drawable/widget_checkbox_unchecked.xml
+-->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="20dp"
+    android:height="20dp"
+    android:viewportWidth="20"
+    android:viewportHeight="20">
+
+    <!--
+        Rounded-square outline path.
+        Viewport is 20×20. Stroke width 1.5 units ≈ 1.5dp at 20dp size.
+        Corner radius 3 units ≈ 3dp.
+    -->
+    <path
+        android:pathData="
+            M3,1.5
+            L17,1.5
+            Q18.5,1.5 18.5,3
+            L18.5,17
+            Q18.5,18.5 17,18.5
+            L3,18.5
+            Q1.5,18.5 1.5,17
+            L1.5,3
+            Q1.5,1.5 3,1.5
+            Z"
+        android:strokeWidth="1.5"
+        android:strokeColor="@color/widget_checkbox_stroke"
+        android:fillColor="@android:color/transparent" />
+
+</vector>

@@ -1,22 +1,28 @@
 package com.mirchevsky.lifearchitect2.widget
 
+import android.accounts.Account
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.appwidget.AppWidgetManager
 import android.content.ComponentName
+import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
 import android.os.Build
+import android.os.Bundle
 import android.os.IBinder
+import android.provider.CalendarContract
 import android.provider.Settings
 import android.speech.RecognitionListener
 import android.speech.RecognizerIntent
 import android.speech.SpeechRecognizer
+import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
@@ -29,6 +35,9 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.CalendarMonth
+import androidx.compose.material.icons.outlined.EditCalendar
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -52,6 +61,7 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.mirchevsky.lifearchitect2.R
+import com.mirchevsky.lifearchitect2.ui.theme.AppTheme
 import com.mirchevsky.lifearchitect2.data.db.AppDatabase
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
 import kotlinx.coroutines.CoroutineScope
@@ -59,6 +69,12 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
+import java.util.TimeZone
 import java.util.UUID
 
 /**
@@ -67,8 +83,19 @@ import java.util.UUID
  * A ForegroundService that draws a slide-up Jetpack Compose panel directly
  * onto the screen using WindowManager + TYPE_APPLICATION_OVERLAY.
  *
- * This is how the widget's +, mic, and calendar buttons achieve full text/voice/
- * calendar input without ever opening the main app.
+ * ## AddEventPanel — no Dialog wrappers
+ *
+ * Compose's Dialog() and DatePickerDialog() call android.app.Dialog.show()
+ * internally, which requires an Activity window token. Inside a WindowManager
+ * overlay service there is no Activity, so the token is null and the app
+ * crashes with BadTokenException. The fix is to render the DatePicker and
+ * TimeInput as *inline* Compose content inside the PanelSurface column,
+ * controlled by a simple EventStep enum state — no Dialog wrapper at all.
+ *
+ * UI flow:
+ *   TITLE step  → user types event title, taps "Set Date & Time"
+ *   DATE  step  → inline DatePicker, taps "Next: Set Time"
+ *   TIME  step  → inline TimeInput, taps "Create Event" → inserts & dismisses
  *
  * Place at:
  *   app/src/main/java/com/mirchevsky/lifearchitect2/widget/WidgetOverlayService.kt
@@ -83,6 +110,7 @@ class WidgetOverlayService : Service() {
 
         private const val CHANNEL_ID = "widget_overlay_channel"
         private const val NOTIF_ID   = 9001
+        private const val TAG        = "WidgetOverlayService"
 
         fun buildIntent(context: Context, action: String, widgetId: Int): Intent =
             Intent(context, WidgetOverlayService::class.java).apply {
@@ -115,17 +143,10 @@ class WidgetOverlayService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Android requires startForeground() to be called within 5 seconds of
-        // startForegroundService() — call it FIRST before any other logic to
-        // avoid ForegroundServiceDidNotStartInTimeException.
         startForegroundCompat()
         lifecycleOwner.lifecycleRegistry.currentState = Lifecycle.State.STARTED
         lifecycleOwner.lifecycleRegistry.currentState = Lifecycle.State.RESUMED
 
-        // Guard: if the overlay permission has not been granted yet, show a
-        // friendly in-app dialog (via OverlayPermissionDialogActivity) that
-        // explains the permission in plain language before deep-linking the user
-        // to the app's own overlay toggle in Settings.
         if (!Settings.canDrawOverlays(this)) {
             startActivity(
                 Intent(this, OverlayPermissionDialogActivity::class.java)
@@ -207,11 +228,13 @@ class WidgetOverlayService : Service() {
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
             setContent {
-                OverlayPanel(
-                    mode = mode,
-                    onDismiss = { dismissOverlay(widgetId, taskSaved = false) },
-                    onSaved   = { dismissOverlay(widgetId, taskSaved = true) }
-                )
+                AppTheme {
+                    OverlayPanel(
+                        mode = mode,
+                        onDismiss = { dismissOverlay(widgetId, taskSaved = false) },
+                        onSaved   = { dismissOverlay(widgetId, taskSaved = true) }
+                    )
+                }
             }
         }
 
@@ -227,39 +250,17 @@ class WidgetOverlayService : Service() {
     }
 
     /**
-     * Dismisses the overlay and, when a task was actually saved, notifies the
-     * widget's RemoteViewsFactory to reload its data from Room.
+     * Dismisses the overlay and, when something was saved, triggers a full
+     * widget rebuild via [TaskWidgetProvider.sendRefreshBroadcast].
      *
-     * notifyAppWidgetViewDataChanged() is the correct and complete mechanism for
-     * refreshing a collection widget's data. Calling setRemoteAdapter() again
-     * (via updateAppWidget) after this call would reset the adapter to "Loading…"
-     * and race with the factory's onDataSetChanged(), so we intentionally do NOT
-     * send a WIDGET_REFRESH broadcast here.
+     * Replaces the deprecated AppWidgetManager.notifyAppWidgetViewDataChanged().
      */
     private fun dismissOverlay(widgetId: Int, taskSaved: Boolean) {
         removeOverlay()
-
         if (taskSaved) {
-            serviceScope.launch {
-                val manager = AppWidgetManager.getInstance(this@WidgetOverlayService)
-                val ids = if (widgetId != AppWidgetManager.INVALID_APPWIDGET_ID) {
-                    intArrayOf(widgetId)
-                } else {
-                    manager.getAppWidgetIds(
-                        ComponentName(this@WidgetOverlayService, TaskWidgetProvider::class.java)
-                    )
-                }
-
-                // Tell the RemoteViewsFactory to call onDataSetChanged() and reload
-                // from Room. This is the only call needed — do not call updateAppWidget
-                // or sendRefreshBroadcast after this.
-                @Suppress("DEPRECATION")
-                manager.notifyAppWidgetViewDataChanged(ids, R.id.widget_task_list)
-
-            }.invokeOnCompletion { stopSelf() }
-        } else {
-            stopSelf()
+            TaskWidgetProvider.sendRefreshBroadcast(this@WidgetOverlayService)
         }
+        stopSelf()
     }
 
     // ── Compose UI ────────────────────────────────────────────────────────────
@@ -349,7 +350,7 @@ class WidgetOverlayService : Service() {
                 colors = outlinedTextFieldColors()
             )
             Spacer(Modifier.height(16.dp))
-            Text("Difficulty", fontSize = 12.sp, color = Color(0xFF9999BB))
+            Text("Difficulty", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DifficultyChip("Easy",   "easy",   Color(0xFF22C55E), difficulty) { difficulty = it }
@@ -374,7 +375,6 @@ class WidgetOverlayService : Service() {
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun MicPanel(onDismiss: () -> Unit, onSaved: () -> Unit) {
-        // ── Audio permission guard ────────────────────────────────────────────
         val hasAudio = ContextCompat.checkSelfPermission(
             applicationContext, android.Manifest.permission.RECORD_AUDIO
         ) == PackageManager.PERMISSION_GRANTED
@@ -387,7 +387,7 @@ class WidgetOverlayService : Service() {
             onDismiss()
             return
         }
-        // ─────────────────────────────────────────────────────────────────────
+
         var title       by remember { mutableStateOf("") }
         var difficulty  by remember { mutableStateOf("medium") }
         var isListening by remember { mutableStateOf(true) }
@@ -447,7 +447,7 @@ class WidgetOverlayService : Service() {
             DragHandle()
             PanelTitle("Voice Input", onDismiss)
             Spacer(Modifier.height(12.dp))
-            Text(statusText, fontSize = 13.sp, color = Color(0xFF10B981))
+            Text(statusText, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = title,
@@ -463,7 +463,7 @@ class WidgetOverlayService : Service() {
                 colors = outlinedTextFieldColors()
             )
             Spacer(Modifier.height(16.dp))
-            Text("Difficulty", fontSize = 12.sp, color = Color(0xFF9999BB))
+            Text("Difficulty", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DifficultyChip("Easy",   "easy",   Color(0xFF22C55E), difficulty) { difficulty = it }
@@ -485,62 +485,265 @@ class WidgetOverlayService : Service() {
     }
 
     // ── Add Calendar Event panel ──────────────────────────────────────────────
+    /**
+     * Three-step inline panel — NO Dialog wrappers.
+     *
+     * Compose's Dialog() calls android.app.Dialog.show() which requires an
+     * Activity window token. Inside a WindowManager overlay service the token
+     * is null → BadTokenException crash. The fix is to render DatePicker and
+     * TimeInput as plain inline Compose content, controlled by EventStep state.
+     *
+     * TITLE → user types title, taps "Set Date & Time"
+     * DATE  → inline DatePicker, taps "Next: Set Time"
+     * TIME  → inline TimeInput, taps "Create Event" → inserts & dismisses
+     */
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun AddEventPanel(onDismiss: () -> Unit, onSaved: () -> Unit) {
+
         var eventTitle by remember { mutableStateOf("") }
         var isSaving   by remember { mutableStateOf(false) }
+        var step       by remember { mutableStateOf(EventStep.TITLE) }
         val keyboard   = LocalSoftwareKeyboardController.current
 
-        fun save() {
-            if (eventTitle.isBlank()) return
-            isSaving = true
-            serviceScope.launch(Dispatchers.IO) {
-                val startMillis = System.currentTimeMillis() + 3_600_000L
-                val endMillis   = startMillis + 3_600_000L
-                val values = android.content.ContentValues().apply {
-                    put(android.provider.CalendarContract.Events.TITLE, eventTitle.trim())
-                    put(android.provider.CalendarContract.Events.DTSTART, startMillis)
-                    put(android.provider.CalendarContract.Events.DTEND, endMillis)
-                    put(android.provider.CalendarContract.Events.EVENT_TIMEZONE,
-                        java.util.TimeZone.getDefault().id)
-                    put(android.provider.CalendarContract.Events.CALENDAR_ID, 1L)
+        // These are hoisted outside the `when` so their state survives step transitions.
+        val datePickerState = rememberDatePickerState(
+            selectableDates = object : SelectableDates {
+                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
+                    val todayUtc = java.time.LocalDate.now()
+                        .atStartOfDay(ZoneId.of("UTC"))
+                        .toInstant()
+                        .toEpochMilli()
+                    return utcTimeMillis >= todayUtc
                 }
-                try {
-                    contentResolver.insert(
-                        android.provider.CalendarContract.Events.CONTENT_URI, values)
-                } catch (_: Exception) {}
-                launch(Dispatchers.Main) { keyboard?.hide(); onSaved() }
+            }
+        )
+        val timePickerState = rememberTimePickerState(
+            initialHour = 9, initialMinute = 0, is24Hour = true
+        )
+
+        fun createEvent() {
+            if (eventTitle.isBlank()) return
+            val dateMillis = datePickerState.selectedDateMillis ?: return
+            val dueDateTime = Instant.ofEpochMilli(dateMillis)
+                .atZone(ZoneId.systemDefault())
+                .toLocalDateTime()
+                .withHour(timePickerState.hour)
+                .withMinute(timePickerState.minute)
+                .withSecond(0).withNano(0)
+
+            isSaving = true
+            serviceScope.launch {
+                val epochMillis = dueDateTime
+                    .atZone(ZoneId.systemDefault())
+                    .toInstant()
+                    .toEpochMilli()
+                val projection = arrayOf(CalendarContract.Calendars._ID)
+                val cr = contentResolver
+
+                val calendarId: Long? = withContext(Dispatchers.IO) {
+                    try {
+                        cr.query(
+                            CalendarContract.Calendars.CONTENT_URI, projection,
+                            "${CalendarContract.Calendars.IS_PRIMARY} = 1", null, null
+                        )?.use { c -> if (c.moveToFirst()) c.getLong(0) else null }
+                    } catch (e: Exception) { Log.e(TAG, "Primary calendar query failed", e); null }
+                        ?: try {
+                            cr.query(
+                                CalendarContract.Calendars.CONTENT_URI, projection, null, null, null
+                            )?.use { c -> if (c.moveToFirst()) c.getLong(0) else null }
+                        } catch (e: Exception) { Log.e(TAG, "Any-calendar query failed", e); null }
+                }
+
+                if (calendarId != null) {
+                    val values = ContentValues().apply {
+                        put(CalendarContract.Events.CALENDAR_ID, calendarId)
+                        put(CalendarContract.Events.TITLE, eventTitle.trim())
+                        put(CalendarContract.Events.DTSTART, epochMillis)
+                        put(CalendarContract.Events.DTEND, epochMillis + 3_600_000L)
+                        put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+                    }
+                    val uri = withContext(Dispatchers.IO) {
+                        try { cr.insert(CalendarContract.Events.CONTENT_URI, values) }
+                        catch (e: Exception) { Log.e(TAG, "Calendar insert failed", e); null }
+                    }
+                    if (uri != null) {
+                        withContext(Dispatchers.IO) {
+                            try {
+                                cr.query(
+                                    CalendarContract.Calendars.CONTENT_URI,
+                                    arrayOf(
+                                        CalendarContract.Calendars.ACCOUNT_NAME,
+                                        CalendarContract.Calendars.ACCOUNT_TYPE
+                                    ),
+                                    "${CalendarContract.Calendars._ID} = ?",
+                                    arrayOf(calendarId.toString()), null
+                                )?.use { c ->
+                                    if (c.moveToFirst()) {
+                                        val account = Account(c.getString(0), c.getString(1))
+                                        ContentResolver.requestSync(
+                                            account, CalendarContract.AUTHORITY,
+                                            Bundle().apply {
+                                                putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
+                                                putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
+                                            }
+                                        )
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                Log.w(TAG, "Sync request failed (non-critical)", e)
+                            }
+                        }
+                    }
+                } else {
+                    val intent = Intent(Intent.ACTION_INSERT).apply {
+                        data = CalendarContract.Events.CONTENT_URI
+                        putExtra(CalendarContract.Events.TITLE, eventTitle.trim())
+                        putExtra(CalendarContract.EXTRA_EVENT_BEGIN_TIME, epochMillis)
+                        putExtra(CalendarContract.EXTRA_EVENT_END_TIME, epochMillis + 3_600_000L)
+                        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    }
+                    startActivity(intent)
+                }
+
+                keyboard?.hide()
+                onSaved()
             }
         }
 
         PanelSurface {
             DragHandle()
-            PanelTitle("New Calendar Event", onDismiss)
-            Spacer(Modifier.height(16.dp))
-            OutlinedTextField(
-                value = eventTitle,
-                onValueChange = { eventTitle = it },
-                label = { Text("Event title") },
-                singleLine = true,
+
+            // ── Header ────────────────────────────────────────────────────────
+            Row(
                 modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
-                    imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(onDone = { save() }),
-                colors = outlinedTextFieldColors()
-            )
-            Spacer(Modifier.height(24.dp))
-            Button(
-                onClick = { save() },
-                enabled = eventTitle.isNotBlank() && !isSaving,
-                modifier = Modifier.fillMaxWidth().height(50.dp),
-                shape = RoundedCornerShape(14.dp),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(if (isSaving) "Creating…" else "Create Event",
-                    fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Outlined.CalendarMonth,
+                        contentDescription = null,
+                        tint = Color(0xFF7C3AED),
+                        modifier = Modifier.size(22.dp)
+                    )
+                    Text(
+                        "New Calendar Event",
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+                }
+                TextButton(onClick = {
+                    if (step != EventStep.TITLE) step = EventStep.TITLE else onDismiss()
+                }) {
+                    Text(
+                        if (step != EventStep.TITLE) "Back" else "✕",
+                        fontSize = 16.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(16.dp))
+
+            // ── Step content ──────────────────────────────────────────────────
+            when (step) {
+
+                // Step 1: title entry
+                EventStep.TITLE -> {
+                    OutlinedTextField(
+                        value = eventTitle,
+                        onValueChange = { eventTitle = it },
+                        label = { Text("Event title") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        keyboardOptions = KeyboardOptions(
+                            capitalization = KeyboardCapitalization.Sentences,
+                            imeAction = ImeAction.Next
+                        ),
+                        keyboardActions = KeyboardActions(onNext = {
+                            if (eventTitle.isNotBlank()) {
+                                keyboard?.hide()
+                                step = EventStep.DATE
+                            }
+                        }),
+                        colors = outlinedTextFieldColors()
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Button(
+                        onClick = {
+                            keyboard?.hide()
+                            step = EventStep.DATE
+                        },
+                        enabled = eventTitle.isNotBlank() && !isSaving,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Outlined.EditCalendar,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            "Set Date & Time",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+                }
+
+                // Step 2: inline date picker (no Dialog)
+                EventStep.DATE -> {
+                    DatePicker(
+                        state = datePickerState,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(Modifier.height(8.dp))
+                    Button(
+                        onClick = { step = EventStep.TIME },
+                        enabled = datePickerState.selectedDateMillis != null,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                    ) {
+                        Text("Next: Set Time", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                    }
+                }
+
+                // Step 3: inline time input (no Dialog) → creates event on confirm
+                EventStep.TIME -> {
+                    Text(
+                        "Select time",
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(bottom = 12.dp)
+                    )
+                    TimeInput(
+                        state = timePickerState,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Button(
+                        onClick = { createEvent() },
+                        enabled = !isSaving,
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                    ) {
+                        Text(
+                            if (isSaving) "Creating…" else "Create Event",
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 15.sp
+                        )
+                    }
+                }
             }
         }
     }
@@ -552,7 +755,7 @@ class WidgetOverlayService : Service() {
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                .background(Color(0xFF1C1E2E))
+                .background(MaterialTheme.colorScheme.surface)
                 .padding(horizontal = 20.dp, vertical = 12.dp)
                 .navigationBarsPadding()
                 .imePadding(),
@@ -570,7 +773,7 @@ class WidgetOverlayService : Service() {
                 modifier = Modifier
                     .width(40.dp).height(4.dp)
                     .clip(RoundedCornerShape(2.dp))
-                    .background(Color(0xFF4A4D6A))
+                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
             )
         }
     }
@@ -582,9 +785,10 @@ class WidgetOverlayService : Service() {
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp, color = Color(0xFFEEEEFF))
+            Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp,
+                color = MaterialTheme.colorScheme.onSurface)
             TextButton(onClick = onDismiss) {
-                Text("✕", fontSize = 16.sp, color = Color(0xFF9999BB))
+                Text("✕", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
@@ -601,28 +805,34 @@ class WidgetOverlayService : Service() {
         Box(
             modifier = Modifier
                 .clip(RoundedCornerShape(10.dp))
-                .background(if (isSelected) activeColor else Color(0xFF2A2D40))
+                .background(if (isSelected) activeColor else MaterialTheme.colorScheme.surfaceVariant)
                 .clickable { onSelect(value) }
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             contentAlignment = Alignment.Center
         ) {
             Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-                color = if (isSelected) Color.White else Color(0xFF9999BB))
+                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
         }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun outlinedTextFieldColors() = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor   = Color(0xFF10B981),
-        unfocusedBorderColor = Color(0xFF3A3D55),
-        focusedLabelColor    = Color(0xFF10B981),
-        unfocusedLabelColor  = Color(0xFF9999BB),
-        cursorColor          = Color(0xFF10B981),
-        focusedTextColor     = Color(0xFFEEEEFF),
-        unfocusedTextColor   = Color(0xFFEEEEFF)
+        focusedBorderColor   = MaterialTheme.colorScheme.primary,
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        focusedLabelColor    = MaterialTheme.colorScheme.primary,
+        unfocusedLabelColor  = MaterialTheme.colorScheme.onSurfaceVariant,
+        cursorColor          = MaterialTheme.colorScheme.primary,
+        focusedTextColor     = MaterialTheme.colorScheme.onSurface,
+        unfocusedTextColor   = MaterialTheme.colorScheme.onSurface
     )
 }
 
-// ── Mode enum ─────────────────────────────────────────────────────────────────
+// ── Enums ─────────────────────────────────────────────────────────────────────
 enum class OverlayMode { ADD_TASK, MIC, ADD_EVENT }
+
+/**
+ * Controls which inline step is shown inside [WidgetOverlayService.AddEventPanel].
+ * Using an enum instead of boolean flags avoids impossible state combinations.
+ */
+enum class EventStep { TITLE, DATE, TIME }

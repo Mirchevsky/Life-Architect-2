@@ -8,8 +8,14 @@
     Place at: app/src/main/res/values-night/colors_widget.xml
 -->
 <resources>
-    <!-- Widget card background — deep navy in dark mode -->
+    <!-- Widget frame background — deep navy in dark mode -->
     <color name="widget_background">#1C1C2E</color>
+
+    <!-- Task row card background — slightly lighter than frame in dark mode -->
+    <color name="widget_item_card">#2A2740</color>
+
+    <!-- Checkbox stroke colour — white at 50% opacity in dark mode -->
+    <color name="widget_checkbox_stroke">#80FFFFFF</color>
 
     <!-- Primary text — white in dark mode -->
     <color name="widget_text_primary">#FFFFFF</color>

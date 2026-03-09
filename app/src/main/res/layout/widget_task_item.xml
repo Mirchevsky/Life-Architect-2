@@ -1,4 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+    widget_task_item.xml
+    ─────────────────────────────────────────────────────────────────────────
+    Single task row for the Life Architect 2 home screen widget.
+
+    Design matches the in-app TaskItem card:
+      ┌──────────────────────────────────────────────────────────────────┐
+      │  [ ]  Task title                              🚩  📌             │
+      └──────────────────────────────────────────────────────────────────┘
+
+    Urgent task:  red title text  + red flag icon visible
+    Pinned task:  amber title text + pin icon visible
+    Normal task:  default text colour, both icons hidden
+
+    Place at: app/src/main/res/layout/widget_task_item.xml
+-->
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_item_root"
@@ -6,26 +22,28 @@
     android:layout_height="wrap_content"
     android:orientation="horizontal"
     android:gravity="center_vertical"
-    android:paddingStart="4dp"
-    android:paddingEnd="4dp"
-    android:paddingTop="6dp"
-    android:paddingBottom="6dp"
-    android:minHeight="40dp">
+    android:background="@drawable/widget_item_bg"
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp"
+    android:paddingTop="10dp"
+    android:paddingBottom="10dp"
+    android:layout_marginBottom="6dp"
+    android:minHeight="48dp">
 
     <!--
-        ImageView instead of TextView so that setColorFilter(int) via
-        RemoteViews.setInt() targets a valid method on the view class.
-        TextView does not expose setColorFilter(int), making the reflective
-        call silently fail or crash on some API levels.
+        Checkbox — ImageView so RemoteViews.setInt("setColorFilter") works.
+        Default tint: widget_checkbox_stroke (theme-aware).
+        Urgent: #E53935  |  Pinned: #F59E0B
     -->
     <ImageView
         android:id="@+id/widget_item_dot"
-        android:layout_width="8dp"
-        android:layout_height="8dp"
-        android:layout_marginEnd="10dp"
-        android:src="@drawable/widget_dot"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:layout_marginEnd="12dp"
+        android:src="@drawable/widget_checkbox_unchecked"
         android:contentDescription="" />
 
+    <!-- Title — weight 1 so it takes remaining space -->
     <TextView
         android:id="@+id/widget_item_title"
         android:layout_width="0dp"
@@ -36,14 +54,41 @@
         android:maxLines="1"
         android:ellipsize="end" />
 
+    <!-- Due date — hidden when null -->
     <TextView
         android:id="@+id/widget_item_due"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:textColor="@color/widget_text_secondary"
         android:textSize="11sp"
-        android:layout_marginStart="8dp"
+        android:layout_marginStart="6dp"
         android:maxLines="1"
+        android:visibility="gone" />
+
+    <!--
+        Flag icon — visible only for urgent tasks.
+        Tinted red (#E53935) via setColorFilter in TaskWidgetItemFactory.
+    -->
+    <ImageView
+        android:id="@+id/widget_item_flag"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginStart="6dp"
+        android:src="@drawable/widget_ic_flag"
+        android:contentDescription=""
+        android:visibility="gone" />
+
+    <!--
+        Pin icon — visible only for pinned tasks.
+        Tinted amber (#F59E0B) via setColorFilter in TaskWidgetItemFactory.
+    -->
+    <ImageView
+        android:id="@+id/widget_item_pin"
+        android:layout_width="16dp"
+        android:layout_height="16dp"
+        android:layout_marginStart="4dp"
+        android:src="@drawable/widget_ic_pin"
+        android:contentDescription=""
         android:visibility="gone" />
 
 </LinearLayout>

@@ -6,6 +6,8 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.provider.CalendarContract
 import android.provider.CalendarContract.Events
+import com.mirchevsky.lifearchitect2.widget.TaskWidgetProvider
+import com.mirchevsky.lifearchitect2.R
 import java.time.Instant
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -260,6 +262,7 @@ class MainViewModel(
             )
         )
         repository.updateUser(finalUser)
+        notifyWidget()
 
         val totalBonus = weeklyBonus + monthlyBonus
         showXpPopup(
@@ -291,6 +294,7 @@ class MainViewModel(
                 completedAt = null
             )
         )
+        notifyWidget()
         showXpPopup(amount = -xpLost, isCritical = false)
         delay(1800)
         onDismissXpPopup()
@@ -323,6 +327,7 @@ class MainViewModel(
                 dueDate = dueDateMillis
             )
             repository.insertTask(newTask)
+            notifyWidget()
         }
 
     /**
@@ -330,6 +335,7 @@ class MainViewModel(
      */
     fun onUpdateTask(task: TaskEntity) = viewModelScope.launch {
         repository.updateTask(task)
+        notifyWidget()
     }
 
     /**
@@ -405,6 +411,22 @@ class MainViewModel(
                 cr.insert(Events.CONTENT_URI, values)
             }
         }
+
+    /**
+     * Triggers a full widget rebuild by sending [TaskWidgetProvider.ACTION_WIDGET_REFRESH]
+     * as a broadcast. [TaskWidgetProvider.onReceive] handles the broadcast by querying
+     * Room on [kotlinx.coroutines.Dispatchers.IO] and pushing a fresh [android.widget.RemoteViews]
+     * — including a new [android.widget.RemoteViews.RemoteCollectionItems] for the task list —
+     * via [android.appwidget.AppWidgetManager.updateAppWidget].
+     *
+     * This replaces the deprecated [android.appwidget.AppWidgetManager.notifyAppWidgetViewDataChanged]
+     * call that was used in the old [android.widget.RemoteViewsService] pattern.
+     *
+     * Called after every task mutation (add, update, complete, revert).
+     */
+    private fun notifyWidget() {
+        TaskWidgetProvider.sendRefreshBroadcast(appContext)
+    }
 
     fun onCalendarClick(task: TaskEntity) {
         val dueDate = task.dueDate ?: return
