@@ -1,10 +1,10 @@
 # Life Architect 2
 
-**Gamify your goals.**
+**Level up your life.**
 
 ---
 
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) [![Kotlin Version](https://img.shields.io/badge/Kotlin-2.0.21-blue.svg)](https://kotlinlang.org) [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-BOM%202026-blue)](https://developer.android.com/jetpack/compose)
+[![License](https://img.shields.io/badge/License-Apache%202.0-a97bff)](https://opensource.org/licenses/Apache-2.0) [![Kotlin Version](https://img.shields.io/badge/Kotlin-2.0.21-a97bff)](https://kotlinlang.org) [![Jetpack Compose](https://img.shields.io/badge/Jetpack%20Compose-BOM%202026-a97bff)](https://developer.android.com/jetpack/compose)
 
 **Life Architect 2** is a native Android application designed to transform personal development into an engaging and rewarding journey. By applying principles of gamification, the app helps users define their goals, break them down into actionable tasks, and track their progress through a system of experience points (XP), levels, and data. It serves as an efficient tool for anyone looking to build habits, learn new skills, and systematically construct a better life.
 
