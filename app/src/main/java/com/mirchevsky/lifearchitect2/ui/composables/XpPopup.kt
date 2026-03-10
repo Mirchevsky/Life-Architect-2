@@ -14,6 +14,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import com.mirchevsky.lifearchitect2.ui.theme.BrandAmber
+import com.mirchevsky.lifearchitect2.ui.theme.BrandGreen
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -55,9 +57,9 @@ fun XpPopup(
     val text = if (amount >= 0) "+${amount} XP" else "${amount} XP"
 
     val color = when {
-        isCritical -> Color(0xFFFFD700) // Gold — visually distinct from normal green
-        amount >= 0 -> Color(0xFF4CAF50) // Green
-        else -> Color(0xFFF44336)        // Red for loss
+        isCritical -> BrandAmber // Gold/amber — visually distinct from normal green
+        amount >= 0 -> BrandGreen // Green
+        else -> MaterialTheme.colorScheme.error // Red for loss
     }
 
     val fontSize = if (isCritical) 30.sp else 22.sp

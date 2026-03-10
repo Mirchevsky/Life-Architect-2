@@ -29,8 +29,7 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
-    android:background="@drawable/widget_background"
-    android:padding="12dp">
+    android:background="@drawable/widget_background">
 
     <!-- ── Header row ──────────────────────────────────────────────────── -->
     <LinearLayout
@@ -38,6 +37,9 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal"
         android:gravity="center_vertical"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="10dp"
         android:paddingBottom="8dp">
 
         <!-- Widget title -->
@@ -112,8 +114,11 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:divider="@null"
-        android:dividerHeight="0dp"
+        android:divider="@color/widget_divider"
+        android:dividerHeight="1dp"
+        android:paddingStart="8dp"
+        android:paddingEnd="8dp"
+        android:clipToPadding="false"
         android:scrollbars="none"
         android:overScrollMode="never" />
 

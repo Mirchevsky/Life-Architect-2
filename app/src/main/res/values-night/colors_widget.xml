@@ -1,41 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-    colors_widget.xml  (values-night = dark mode)
+    colors_widget.xml  (dark mode overrides)
     ─────────────────────────────────────────────────────────────────────────
     Widget colour tokens for DARK mode.
-    The light-mode counterparts live in res/values/colors_widget.xml.
-
-    Android automatically picks the correct file based on the system's
-    night-mode setting. Because AppWidgetManager.updateAppWidget() is called
-    on every configuration change, the widget re-renders with the correct
-    colours whenever the user switches between light and dark mode.
+    Android automatically picks this file when the system is in night mode.
 
     Place at: app/src/main/res/values-night/colors_widget.xml
 -->
 <resources>
-    <!-- Widget frame background — dark in dark mode -->
-    <color name="widget_background">#1C1C2E</color>
+    <!-- Widget outer frame background -->
+    <color name="widget_background">#141A22</color>
 
-    <!-- Task row card background — slightly lighter than frame in dark mode -->
-    <color name="widget_item_card">#2A2A3E</color>
+    <!-- Task row card background -->
+    <color name="widget_item_card">#0B0F14</color>
 
-    <!-- Checkbox stroke colour — white at 40% opacity in dark mode -->
-    <color name="widget_checkbox_stroke">#66FFFFFF</color>
+    <!-- Divider line between rows -->
+    <color name="widget_divider">#1F2933</color>
 
-    <!-- Primary text (title, task names) — near-white in dark mode -->
-    <color name="widget_text_primary">#F0F0FF</color>
+    <!-- Primary text (task titles) -->
+    <color name="widget_text_primary">#F3F4F6</color>
 
-    <!-- Secondary text (due dates, empty state) — muted white -->
-    <color name="widget_text_secondary">#99F0F0FF</color>
+    <!-- Secondary text (due dates, empty state) -->
+    <color name="widget_text_secondary">#9CA3AF</color>
 
-    <!-- Divider line — subtle white -->
-    <color name="widget_divider">#33FFFFFF</color>
+    <!-- Inactive icon tint (flag, pin, checkbox when not active) -->
+    <color name="widget_icon_inactive">#6B7280</color>
 
-    <!--
-        Inactive flag / pin icon tint — white at 40% opacity in dark mode.
-        Matches widget_checkbox_stroke so inactive icons blend with the
-        checkbox and feel like part of the same muted UI layer.
-        The light-mode counterpart in values/ uses 40% dark instead.
-    -->
-    <color name="widget_icon_inactive">#66FFFFFF</color>
+    <!-- Checkbox unchecked border -->
+    <color name="widget_checkbox_stroke">#6B7280</color>
+
+    <!-- Urgent task text and flag icon -->
+    <color name="widget_urgent">#F87171</color>
+
+    <!-- Pinned task text and pin icon -->
+    <color name="widget_pinned">#FBBF24</color>
+
+    <!-- Accent green (Add button background) -->
+    <color name="widget_accent_green">#10B981</color>
+
+    <!-- Accent purple (Calendar button background) -->
+    <color name="widget_accent_purple">#7C3AED</color>
+
+    <!-- Button icon / text colour -->
+    <color name="widget_btn_icon">#FFFFFF</color>
 </resources>

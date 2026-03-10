@@ -64,6 +64,7 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
+import com.mirchevsky.lifearchitect2.ui.theme.BrandAmber
 import com.mirchevsky.lifearchitect2.ui.theme.Purple
 import java.time.Instant
 import java.time.LocalDate
@@ -150,15 +151,18 @@ fun TaskItem(
 
     // ── Title colour ────────────────────────────────────────────────────────
     val titleColor: Color = when {
-        task.isUrgent -> Color(0xFFE53935)
-        task.isPinned -> Color(0xFFFFC107)
+        task.isUrgent -> MaterialTheme.colorScheme.error
+        task.isPinned -> BrandAmber
         else          -> MaterialTheme.colorScheme.onSurface
     }
 
     // ── Card ────────────────────────────────────────────────────────────
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Row(
             modifier = Modifier
@@ -258,7 +262,7 @@ fun TaskItem(
                 Icon(
                     imageVector = if (task.isUrgent) Icons.Filled.Flag else Icons.Outlined.Flag,
                     contentDescription = if (task.isUrgent) "Remove urgent" else "Mark urgent",
-                    tint = if (task.isUrgent) Color(0xFFE53935)
+                    tint = if (task.isUrgent) MaterialTheme.colorScheme.error
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
                 )
@@ -272,7 +276,7 @@ fun TaskItem(
                 Icon(
                     imageVector = if (task.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
                     contentDescription = if (task.isPinned) "Unpin task" else "Pin task to top",
-                    tint = if (task.isPinned) Color(0xFFFFC107)
+                    tint = if (task.isPinned) BrandAmber
                     else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
                 )

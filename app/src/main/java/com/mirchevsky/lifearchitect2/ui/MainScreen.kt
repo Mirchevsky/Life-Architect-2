@@ -11,7 +11,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -74,11 +76,15 @@ fun MainScreen(viewModel: MainViewModel) {
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets(0),
             bottomBar = {
                 // Hide the navigation bar when the keyboard is open (WhatsApp-style)
                 AnimatedVisibility(visible = !imeVisible) {
-                    NavigationBar {
+                    NavigationBar(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        tonalElevation = 0.dp
+                    ) {
                         val navBackStackEntry by navController.currentBackStackEntryAsState()
                         val currentDestination = navBackStackEntry?.destination
 

@@ -27,16 +27,25 @@ import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.StartOffset
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.EditCalendar
 import androidx.compose.material3.*
@@ -406,7 +415,7 @@ class WidgetOverlayService : Service() {
         ) {
             Text(
                 text = message,
-                color = Color(0xFF7C3AED),
+                color = Color(0xFF22C55E),
                 fontSize = 22.sp,
                 fontWeight = FontWeight.ExtraBold,
                 modifier = Modifier
@@ -500,7 +509,7 @@ class WidgetOverlayService : Service() {
                     imeAction = ImeAction.Done
                 ),
                 keyboardActions = KeyboardActions(onDone = { save() }),
-                colors = outlinedTextFieldColors()
+                colors = greenTextFieldColors()
             )
             Spacer(Modifier.height(16.dp))
             Button(
@@ -537,15 +546,15 @@ class WidgetOverlayService : Service() {
             return
         }
 
-        var title       by remember { mutableStateOf("") }
-        var difficulty  by remember { mutableStateOf("medium") }
-        var isListening by remember { mutableStateOf(true) }
-        var statusText  by remember { mutableStateOf("Listening…") }
-        var isSaving    by remember { mutableStateOf(false) }
-        val keyboard    = LocalSoftwareKeyboardController.current
+        var title          by remember { mutableStateOf("") }
+        var isListening    by remember { mutableStateOf(true) }
+        var isSaving       by remember { mutableStateOf(false) }
+        var recognizerRef  by remember { mutableStateOf<SpeechRecognizer?>(null) }
+        val keyboard       = LocalSoftwareKeyboardController.current
 
         DisposableEffect(Unit) {
             val recognizer = SpeechRecognizer.createSpeechRecognizer(applicationContext)
+            recognizerRef = recognizer
             val recognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
                 putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
                     RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
@@ -553,16 +562,16 @@ class WidgetOverlayService : Service() {
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             }
             recognizer.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: android.os.Bundle?) { statusText = "Listening…" }
-                override fun onBeginningOfSpeech() { statusText = "Hearing you…" }
+                override fun onReadyForSpeech(params: android.os.Bundle?) { isListening = true }
+                override fun onBeginningOfSpeech() { isListening = true }
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() { statusText = "Processing…" }
-                override fun onError(error: Int) { isListening = false; statusText = "Tap the field to type instead" }
+                override fun onEndOfSpeech() {}
+                override fun onError(error: Int) { isListening = false }
                 override fun onResults(results: android.os.Bundle?) {
                     val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     if (!matches.isNullOrEmpty()) title = matches[0]
-                    isListening = false; statusText = "Edit or save"
+                    isListening = false
                 }
                 override fun onPartialResults(partialResults: android.os.Bundle?) {
                     val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
@@ -571,7 +580,7 @@ class WidgetOverlayService : Service() {
                 override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
             })
             recognizer.startListening(recognizerIntent)
-            onDispose { recognizer.destroy() }
+            onDispose { recognizerRef = null; recognizer.destroy() }
         }
 
         fun save() {
@@ -583,7 +592,7 @@ class WidgetOverlayService : Service() {
                         id          = UUID.randomUUID().toString(),
                         userId      = "local_user",
                         title       = title.trim(),
-                        difficulty  = difficulty,
+                        difficulty  = "medium",
                         status      = "pending",
                         isCompleted = false
                     )
@@ -592,16 +601,97 @@ class WidgetOverlayService : Service() {
             }
         }
 
+        // ── Re-start listening when user taps mic icon ───────────────────────
+        fun startListening() {
+            isListening = true
+            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+            }
+            recognizerRef?.startListening(intent)
+        }
+
         PanelSurface {
             DragHandle()
-            PanelTitle("Voice Input", onDismiss)
+
+            // ── Header: close button only (no title) ─────────────────────────
+            Box(modifier = Modifier.fillMaxWidth()) {
+                IconButton(
+                    onClick = onDismiss,
+                    modifier = Modifier.align(Alignment.TopEnd)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = "Close",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(4.dp))
+
+            // ── Listening indicator: dancing dots OR mic icon ─────────────────
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(56.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isListening) {
+                    // Three animated dots in app green/purple/green
+                    val dotColors = listOf(
+                        Color(0xFF22C55E),
+                        Color(0xFF7C3AED),
+                        Color(0xFF22C55E)
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        dotColors.forEachIndexed { index, dotColor ->
+                            val infiniteTransition = rememberInfiniteTransition(label = "dot$index")
+                            val yOffset by infiniteTransition.animateFloat(
+                                initialValue = 0f,
+                                targetValue  = -12f,
+                                animationSpec = infiniteRepeatable(
+                                    animation = tween(
+                                        durationMillis = 500,
+                                        easing = FastOutSlowInEasing
+                                    ),
+                                    repeatMode = RepeatMode.Reverse,
+                                    initialStartOffset = StartOffset(index * 160)
+                                ),
+                                label = "dot${index}Y"
+                            )
+                            Box(
+                                modifier = Modifier
+                                    .size(12.dp)
+                                    .offset(y = androidx.compose.ui.unit.Dp(yOffset))
+                                    .clip(CircleShape)
+                                    .background(dotColor)
+                            )
+                        }
+                    }
+                } else {
+                    // Idle: tappable mic icon to re-start listening
+                    IconButton(onClick = { startListening() }) {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = "Record again",
+                            tint = Color(0xFF22C55E),
+                            modifier = Modifier.size(36.dp)
+                        )
+                    }
+                }
+            }
+
             Spacer(Modifier.height(12.dp))
-            Text(statusText, fontSize = 13.sp, color = MaterialTheme.colorScheme.primary)
-            Spacer(Modifier.height(12.dp))
+
             OutlinedTextField(
                 value = title,
                 onValueChange = { title = it; isListening = false },
-                label = { Text("Transcribed text") },
+                placeholder = { Text("Audio...") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 keyboardOptions = KeyboardOptions(
@@ -609,17 +699,9 @@ class WidgetOverlayService : Service() {
                     imeAction = ImeAction.Done
                 ),
                 keyboardActions = KeyboardActions(onDone = { save() }),
-                colors = outlinedTextFieldColors()
+                colors = greenTextFieldColors()
             )
-            Spacer(Modifier.height(16.dp))
-            Text("Difficulty", fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                DifficultyChip("Easy",   "easy",   Color(0xFF22C55E), difficulty) { difficulty = it }
-                DifficultyChip("Medium", "medium", Color(0xFFF59E0B), difficulty) { difficulty = it }
-                DifficultyChip("Hard",   "hard",   Color(0xFFEF4444), difficulty) { difficulty = it }
-            }
-            Spacer(Modifier.height(24.dp))
+            Spacer(Modifier.height(20.dp))
             Button(
                 onClick = { save() },
                 enabled = title.isNotBlank() && !isSaving,
@@ -1161,6 +1243,17 @@ class WidgetOverlayService : Service() {
         focusedLabelColor    = Color(0xFF7C3AED),
         unfocusedLabelColor  = MaterialTheme.colorScheme.onSurfaceVariant,
         cursorColor          = Color(0xFF7C3AED),
+        focusedTextColor     = MaterialTheme.colorScheme.onSurface,
+        unfocusedTextColor   = MaterialTheme.colorScheme.onSurface
+    )
+
+    @Composable
+    private fun greenTextFieldColors() = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor   = Color(0xFF22C55E),
+        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+        focusedLabelColor    = Color(0xFF22C55E),
+        unfocusedLabelColor  = MaterialTheme.colorScheme.onSurfaceVariant,
+        cursorColor          = Color(0xFF22C55E),
         focusedTextColor     = MaterialTheme.colorScheme.onSurface,
         unfocusedTextColor   = MaterialTheme.colorScheme.onSurface
     )

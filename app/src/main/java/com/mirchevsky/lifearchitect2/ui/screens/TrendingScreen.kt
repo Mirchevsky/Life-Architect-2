@@ -175,7 +175,7 @@ private fun TrendCard(trend: TrendItem) {
                 openTrendLink(context, destination)
             },
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
+            containerColor = MaterialTheme.colorScheme.surface
         )
     ) {
         Row(

@@ -1,18 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    widget_background.xml
-    ─────────────────────────────────────────────────────────────────────────
-    Rounded rectangle background for the widget frame.
-
-    Uses @color/widget_background which resolves to:
-      - #F5F5F5  (near-white) in light mode  — res/values/colors_widget.xml
-      - #1C1C2E  (deep navy)  in dark mode   — res/values-night/colors_widget.xml
-
-    Android picks the correct colour automatically based on the system's
-    night-mode setting and re-renders the widget on configuration change.
-
-    Place at: app/src/main/res/drawable/widget_background.xml
--->
 <shape xmlns:android="http://schemas.android.com/apk/res/android"
     android:shape="rectangle">
 

@@ -53,6 +53,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
+import com.mirchevsky.lifearchitect2.ui.theme.BrandGreen
+import com.mirchevsky.lifearchitect2.ui.theme.BrandOrange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextDecoration
@@ -141,7 +143,13 @@ private fun UserProfileCard(
     val xpNeeded = xpForNextLevel(level)
     val progress = (xp.toFloat() / xpNeeded).coerceIn(0f, 1f)
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -196,7 +204,7 @@ private fun UserProfileCard(
                 Icon(
                     imageVector = Icons.Default.LocalFireDepartment,
                     contentDescription = "Streak",
-                    tint = if (dailyStreak > 0) Color(0xFFFF6D00) else MaterialTheme.colorScheme.onSurfaceVariant,
+                    tint = if (dailyStreak > 0) BrandOrange else MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(24.dp)
                 )
                 Text(
@@ -229,7 +237,13 @@ private fun StatRow(totalTasks: Int, totalCalendarEvents: Int) {
 
 @Composable
 private fun StatCard(title: String, value: String, modifier: Modifier = Modifier) {
-    Card(modifier = modifier) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
         Column(
             modifier = Modifier
                 .fillMaxWidth()
@@ -263,7 +277,13 @@ private fun CompletionChart(data: Map<LocalDate, Int>, anchorDay: LocalDate = Lo
     val sortedEntries = windowDays.map { day -> day to (data[day] ?: 0) }
     val maxCount = sortedEntries.maxOfOrNull { it.second } ?: 0
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = "Tasks Completed in the Last 30 Days",
@@ -430,7 +450,13 @@ private fun YearlyTaskCalendar(
     var currentMonth by remember { mutableStateOf(YearMonth.now()) }
     val currentYear = today.year
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
 
             // Month navigation header — constrained to current year, wraps around
@@ -574,7 +600,7 @@ private fun MonthBlock(
                                         modifier = Modifier
                                             .size(4.dp)
                                             .clip(CircleShape)
-                                            .background(Color(0xFF4CAF50))
+                                            .background(BrandGreen)
                                     )
                                 }
                                 if (status == DayStatus.PENDING || status == DayStatus.BOTH) {
@@ -582,7 +608,7 @@ private fun MonthBlock(
                                         modifier = Modifier
                                             .size(4.dp)
                                             .clip(CircleShape)
-                                            .background(Color(0xFFF44336))
+                                            .background(MaterialTheme.colorScheme.error)
                                     )
                                 }
                             }
@@ -607,7 +633,13 @@ private fun DayDetailPanel(
     val formatter = DateTimeFormatter.ofPattern("EEEE, MMMM d")
     val zone = ZoneId.systemDefault()
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Text(
                 text = selectedDay.format(formatter),
@@ -633,10 +665,7 @@ private fun DayDetailPanel(
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(
-                                containerColor = if (isCompleted)
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                else
-                                    MaterialTheme.colorScheme.surfaceVariant
+                                containerColor = MaterialTheme.colorScheme.surface
                             )
                         ) {
                             Row(
@@ -728,7 +757,13 @@ private fun TipOfTheVisit() {
     // Pick a new random tip each time this composable enters composition (i.e. each tab visit)
     val tip = remember { APP_TIPS.random() }
 
-    Card(modifier = Modifier.fillMaxWidth()) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
         Row(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.Top,

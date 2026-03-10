@@ -2,10 +2,10 @@ package com.mirchevsky.lifearchitect2.widget
 
 import android.content.Context
 import android.content.Intent
-import android.graphics.Color
 import android.view.View
 import android.widget.RemoteViews
 import android.widget.RemoteViewsService
+import androidx.core.content.ContextCompat
 import com.mirchevsky.lifearchitect2.R
 import com.mirchevsky.lifearchitect2.data.db.AppDatabase
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
@@ -66,12 +66,13 @@ class TaskWidgetItemFactory(
 
     private var tasks: List<TaskEntity> = emptyList()
 
-    // Colours applied via RemoteViews.setInt(id, "setColorFilter", color)
-    // and RemoteViews.setTextColor(id, color).
-    private val colorUrgent  = Color.parseColor("#E53935")   // red
-    private val colorPinned  = Color.parseColor("#F59E0B")   // amber
-    private val colorDefault = Color.parseColor("#80FFFFFF") // muted white (dark mode)
-    private val colorPurple  = Color.parseColor("#7C3AED")   // app purple (calendar icon tint)
+    // Colours resolved from @color resources — automatically picks light or dark
+    // variant based on system night-mode. No hardcoded values.
+    private val colorUrgent  by lazy { ContextCompat.getColor(context, R.color.widget_urgent) }
+    private val colorPinned  by lazy { ContextCompat.getColor(context, R.color.widget_pinned) }
+    private val colorPrimary by lazy { ContextCompat.getColor(context, R.color.widget_text_primary) }
+    private val colorDefault by lazy { ContextCompat.getColor(context, R.color.widget_icon_inactive) }
+    private val colorPurple  by lazy { ContextCompat.getColor(context, R.color.widget_accent_purple) }
 
     // ── Factory lifecycle ─────────────────────────────────────────────────────
 
@@ -110,7 +111,7 @@ class TaskWidgetItemFactory(
         val titleColor = when {
             task.isUrgent -> colorUrgent
             task.isPinned -> colorPinned
-            else          -> Color.parseColor("#EEEEEE")
+            else          -> colorPrimary
         }
         rv.setTextColor(R.id.widget_item_title, titleColor)
 
