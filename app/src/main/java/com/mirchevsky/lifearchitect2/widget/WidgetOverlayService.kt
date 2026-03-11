@@ -7,13 +7,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.Service
 import android.appwidget.AppWidgetManager
-import android.content.BroadcastReceiver
-import android.content.ComponentName
 import android.content.ContentResolver
 import android.content.ContentValues
 import android.content.Context
 import android.content.Intent
-import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.graphics.PixelFormat
@@ -29,23 +26,20 @@ import android.util.Log
 import android.view.Gravity
 import android.view.WindowManager
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.StartOffset
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.*
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.LocalTextSelectionColors
+import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
@@ -57,12 +51,21 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.foundation.layout.offset
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -75,89 +78,28 @@ import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.mirchevsky.lifearchitect2.R
-import com.mirchevsky.lifearchitect2.ui.theme.AppTheme
 import com.mirchevsky.lifearchitect2.data.db.AppDatabase
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
-import com.mirchevsky.lifearchitect2.widget.CalendarPermissionActivity
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+import com.mirchevsky.lifearchitect2.ui.theme.AppTheme
+import kotlinx.coroutines.*
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
-import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
-import java.util.TimeZone
-import java.util.UUID
+import java.util.*
 
-/**
- * WidgetOverlayService
- * ─────────────────────────────────────────────────────────────────────────────
- * A ForegroundService that draws a slide-up Jetpack Compose panel directly
- * onto the screen using WindowManager + TYPE_APPLICATION_OVERLAY.
- *
- * ## Permission-resume flow
- * When a permission is needed (overlay, mic, calendar), the service stores the
- * original intent in the STATIC [pendingIntentToExecute] field in the companion
- * object. This is critical — the service instance is destroyed when it launches
- * a permission activity, so an instance field would be lost. The static field
- * survives across service instances.
- *
- * The permission activity broadcasts [ACTION_PERMISSION_GRANTED] on success.
- * A new service instance is started, registers [permissionGrantedReceiver], and
- * immediately picks up the broadcast. The receiver calls startService with the
- * stored static intent, re-entering onStartCommand with the original action —
- * this time with permission granted, so the panel opens without a second tap.
- *
- * ## AddEventPanel — no Dialog wrappers
- * Compose's Dialog() and DatePickerDialog() call android.app.Dialog.show()
- * internally, which requires an Activity window token. Inside a WindowManager
- * overlay service there is no Activity, so the token is null and the app
- * crashes with BadTokenException. The fix is to render the DatePicker and
- * TimeInput as *inline* Compose content inside the PanelSurface column,
- * controlled by a simple EventStep enum state — no Dialog wrapper at all.
- *
- * UI flow:
- *   TITLE step  → user types event title, taps "Set Date & Time"
- *   DATE  step  → inline DatePicker, taps "Next: Set Time"
- *   TIME  step  → "All day" toggle + optional inline TimeInput, taps "Create Event"
- *
- * Place at:
- *   app/src/main/java/com/mirchevsky/lifearchitect2/widget/WidgetOverlayService.kt
- */
 class WidgetOverlayService : Service() {
 
-    // ── Constants ─────────────────────────────────────────────────────────────
     companion object {
-        const val ACTION_ADD_TASK  = "com.mirchevsky.lifearchitect2.OVERLAY_ADD_TASK"
+        const val ACTION_ADD_TASK = "com.mirchevsky.lifearchitect2.OVERLAY_ADD_TASK"
         const val ACTION_ADD_EVENT = "com.mirchevsky.lifearchitect2.OVERLAY_ADD_EVENT"
-        const val ACTION_MIC       = "com.mirchevsky.lifearchitect2.OVERLAY_MIC"
-        const val ACTION_SHOW_XP   = "com.mirchevsky.lifearchitect2.OVERLAY_SHOW_XP"
-
-        /**
-         * Broadcast sent by [CalendarPermissionActivity], [MicPermissionActivity],
-         * and [OverlayPermissionDialogActivity] when their respective permission is
-         * granted. The service listens for this and immediately re-executes the
-         * pending intent so the user does not need to tap the widget button again.
-         */
-        const val ACTION_PERMISSION_GRANTED = "com.mirchevsky.lifearchitect2.OVERLAY_PERMISSION_GRANTED"
-
-        const val EXTRA_XP_AMOUNT  = "xp_amount"
-        const val EXTRA_XP_LABEL   = "xp_label"
-
+        const val ACTION_MIC = "com.mirchevsky.lifearchitect2.OVERLAY_MIC"
+        const val ACTION_SHOW_XP = "com.mirchevsky.lifearchitect2.OVERLAY_SHOW_XP"
+        const val EXTRA_XP_AMOUNT = "xp_amount"
+        const val EXTRA_XP_LABEL = "xp_label"
         private const val CHANNEL_ID = "widget_overlay_channel"
-        private const val NOTIF_ID   = 9001
-        private const val TAG        = "WidgetOverlayService"
-
-        /**
-         * STATIC — stores the original intent when a permission gate is hit.
-         * Must be static because the service instance is destroyed when it
-         * launches a permission activity. A static field persists across instances.
-         */
-        private var pendingIntentToExecute: Intent? = null
+        private const val NOTIF_ID = 9001
+        private const val TAG = "WidgetOverlayService"
 
         fun buildIntent(context: Context, action: String, widgetId: Int): Intent =
             Intent(context, WidgetOverlayService::class.java).apply {
@@ -166,13 +108,11 @@ class WidgetOverlayService : Service() {
             }
     }
 
-    // ── State ─────────────────────────────────────────────────────────────
     private lateinit var windowManager: WindowManager
     private var overlayView: ComposeView? = null
     private var feedbackView: ComposeView? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
 
-    // ── Lifecycle owner shim (required for ComposeView outside an Activity) ───
     private val lifecycleOwner = object : LifecycleOwner, SavedStateRegistryOwner {
         val lifecycleRegistry = LifecycleRegistry(this)
         val savedStateRegistryController = SavedStateRegistryController.create(this)
@@ -181,390 +121,256 @@ class WidgetOverlayService : Service() {
             get() = savedStateRegistryController.savedStateRegistry
     }
 
-    /**
-     * Receives [ACTION_PERMISSION_GRANTED] from the permission activities and
-     * immediately re-executes the static pending intent so the overlay panel
-     * opens without requiring a second tap from the user.
-     */
-    private val permissionGrantedReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == ACTION_PERMISSION_GRANTED) {
-                Log.d(TAG, "Permission granted — resuming pending action.")
-                pendingIntentToExecute?.let { startService(it) }
-                pendingIntentToExecute = null
-            }
-        }
-    }
-
-    // ── Service lifecycle ─────────────────────────────────────────────────────
     override fun onCreate() {
         super.onCreate()
         windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
         lifecycleOwner.savedStateRegistryController.performRestore(null)
         lifecycleOwner.lifecycleRegistry.currentState = Lifecycle.State.CREATED
         createNotificationChannel()
-        // Register the permission-resume receiver so we can react to grants
-        // even when this is a freshly created service instance.
-        ContextCompat.registerReceiver(
-            this,
-            permissionGrantedReceiver,
-            IntentFilter(ACTION_PERMISSION_GRANTED),
-            ContextCompat.RECEIVER_NOT_EXPORTED
-        )
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        if (intent == null) {
+            stopSelf(startId)
+            return START_NOT_STICKY
+        }
         startForegroundCompat()
-        lifecycleOwner.lifecycleRegistry.currentState = Lifecycle.State.STARTED
         lifecycleOwner.lifecycleRegistry.currentState = Lifecycle.State.RESUMED
 
-        // ── Overlay permission gate (applies to all actions) ──────────────────
         if (!Settings.canDrawOverlays(this)) {
-            pendingIntentToExecute = intent   // store statically before destroying
+            PendingWidgetActionStore.saveServiceIntent(this, intent)
             startActivity(
                 Intent(this, OverlayPermissionDialogActivity::class.java)
-                    .addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK or
-                                Intent.FLAG_ACTIVITY_NO_HISTORY or
-                                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                    )
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
             )
-            // Keep alive so the receiver can fire when the activity broadcasts.
-            return START_STICKY
+            stopSelf(startId)
+            return START_NOT_STICKY
         }
 
-        val widgetId = intent?.getIntExtra(
-            AppWidgetManager.EXTRA_APPWIDGET_ID,
-            AppWidgetManager.INVALID_APPWIDGET_ID
-        ) ?: AppWidgetManager.INVALID_APPWIDGET_ID
+        val widgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, AppWidgetManager.INVALID_APPWIDGET_ID)
 
-        when (intent?.action) {
-            ACTION_ADD_TASK  -> showOverlay(OverlayMode.ADD_TASK, widgetId)
-
+        when (intent.action) {
+            ACTION_ADD_TASK -> showOverlay(OverlayMode.ADD_TASK, widgetId)
             ACTION_MIC -> {
-                val hasAudio = ContextCompat.checkSelfPermission(
-                    this, Manifest.permission.RECORD_AUDIO
-                ) == PackageManager.PERMISSION_GRANTED
-                if (!hasAudio) {
-                    pendingIntentToExecute = intent   // store statically
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+                    PendingWidgetActionStore.saveServiceIntent(this, intent)
                     startActivity(
                         Intent(this, MicPermissionActivity::class.java)
-                            .addFlags(
-                                Intent.FLAG_ACTIVITY_NEW_TASK or
-                                        Intent.FLAG_ACTIVITY_NO_HISTORY or
-                                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                            )
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
                     )
-                    return START_STICKY
+                    stopSelf(startId)
+                    return START_NOT_STICKY
                 } else {
                     showOverlay(OverlayMode.MIC, widgetId)
                 }
             }
-
             ACTION_SHOW_XP -> {
-                if (Settings.canDrawOverlays(this)) {
-                    val xp    = intent?.getIntExtra(EXTRA_XP_AMOUNT, 10) ?: 10
-                    val label = intent?.getStringExtra(EXTRA_XP_LABEL) ?: "+${xp} XP"
-                    showFeedbackOverlay(label)
-                } else {
-                    stopSelf()
-                }
+                val xp = intent.getIntExtra(EXTRA_XP_AMOUNT, 10)
+                val label = intent.getStringExtra(EXTRA_XP_LABEL) ?: "+${xp} XP"
+                showFeedbackOverlay(label)
             }
-
             ACTION_ADD_EVENT -> {
-                val hasRead  = ContextCompat.checkSelfPermission(
-                    this, android.Manifest.permission.READ_CALENDAR
-                ) == PackageManager.PERMISSION_GRANTED
-                val hasWrite = ContextCompat.checkSelfPermission(
-                    this, android.Manifest.permission.WRITE_CALENDAR
-                ) == PackageManager.PERMISSION_GRANTED
-                if (!hasRead || !hasWrite) {
-                    pendingIntentToExecute = intent   // store statically
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.READ_CALENDAR) != PackageManager.PERMISSION_GRANTED ||
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_CALENDAR) != PackageManager.PERMISSION_GRANTED) {
+                    PendingWidgetActionStore.saveServiceIntent(this, intent)
                     startActivity(
                         Intent(this, CalendarPermissionActivity::class.java)
-                            .addFlags(
-                                Intent.FLAG_ACTIVITY_NEW_TASK or
-                                        Intent.FLAG_ACTIVITY_NO_HISTORY or
-                                        Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                            )
+                            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_HISTORY or Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS)
                     )
-                    return START_STICKY
+                    stopSelf(startId)
+                    return START_NOT_STICKY
                 } else {
                     showOverlay(OverlayMode.ADD_EVENT, widgetId)
                 }
             }
-
-            else -> stopSelf()
+            else -> stopSelf(startId)
         }
-        return START_NOT_STICKY
-    }
-
-    override fun onBind(intent: Intent?): IBinder? = null
-
-    override fun onDestroy() {
-        removeOverlay()
-        removeFeedbackOverlay()
-        try { unregisterReceiver(permissionGrantedReceiver) } catch (_: Exception) {}
-        lifecycleOwner.lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
-        serviceScope.cancel()
-        super.onDestroy()
-    }
-
-    // ── Foreground notification ───────────────────────────────────────────────
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
-            CHANNEL_ID,
-            "Life Architect Widget",
-            NotificationManager.IMPORTANCE_MIN
-        ).apply {
-            description = "Used while the task input panel is open"
-            setShowBadge(false)
-        }
-        (getSystemService(NOTIFICATION_SERVICE) as NotificationManager)
-            .createNotificationChannel(channel)
+        return START_STICKY
     }
 
     private fun startForegroundCompat() {
         val notification = Notification.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.widget_ic_add)
             .setContentTitle("Life Architect")
             .setContentText("Adding task…")
+            .setSmallIcon(R.drawable.widget_ic_add)
             .setOngoing(true)
             .build()
-
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(NOTIF_ID, notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
+            startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
             startForeground(NOTIF_ID, notification)
         }
     }
 
-    // ── Overlay management ────────────────────────────────────────────────────
     private fun showOverlay(mode: OverlayMode, widgetId: Int) {
-        removeOverlay()
-
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                    WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.BOTTOM
-        }
-
-        val composeView = ComposeView(this).apply {
-            setViewTreeLifecycleOwner(lifecycleOwner)
-            setViewTreeSavedStateRegistryOwner(lifecycleOwner)
-            setContent {
-                AppTheme {
-                    OverlayPanel(
-                        mode = mode,
-                        onDismiss = { dismissOverlay(widgetId, taskSaved = false) },
-                        onSaved   = { message -> dismissOverlayWithFeedback(widgetId, message) }
-                    )
-                }
-            }
-        }
-
-        overlayView = composeView
-        windowManager.addView(composeView, params)
-    }
-
-    private fun removeOverlay() {
-        overlayView?.let {
-            try { windowManager.removeView(it) } catch (_: Exception) {}
-            overlayView = null
-        }
-    }
-
-    private fun removeFeedbackOverlay() {
-        feedbackView?.let {
-            try { windowManager.removeView(it) } catch (_: Exception) {}
-            feedbackView = null
-        }
-    }
-
-    /**
-     * Dismisses the input panel, refreshes the widget, then shows a floating
-     * feedback toast (e.g. "Task Saved", "Event Created") via a separate
-     * WindowManager ComposeView that auto-dismisses after its animation.
-     */
-    private fun dismissOverlayWithFeedback(widgetId: Int, feedbackMessage: String) {
-        removeOverlay()
-        TaskWidgetProvider.sendRefreshBroadcast(this@WidgetOverlayService)
-        if (feedbackMessage.isNotBlank()) {
-            showFeedbackOverlay(feedbackMessage)
-        } else {
-            // Silent dismiss — no toast, just stop the service.
-            stopSelf()
-        }
-    }
-
-    /**
-     * Dismisses the overlay and, when something was saved, triggers a full
-     * widget rebuild via [TaskWidgetProvider.sendRefreshBroadcast].
-     */
-    private fun dismissOverlay(widgetId: Int, taskSaved: Boolean) {
-        removeOverlay()
-        if (taskSaved) {
-            TaskWidgetProvider.sendRefreshBroadcast(this@WidgetOverlayService)
-        }
-        stopSelf()
-    }
-
-    /**
-     * Shows a lightweight floating feedback overlay using a separate WindowManager
-     * ComposeView. The overlay floats upward, fades out, then removes itself —
-     * no app launch required.
-     *
-     * @param message The text to display (e.g. "Task Saved", "Event Created").
-     */
-    private fun showFeedbackOverlay(message: String) {
-        removeFeedbackOverlay()
-
+        if (overlayView != null) return
         val params = WindowManager.LayoutParams(
             WindowManager.LayoutParams.MATCH_PARENT,
             WindowManager.LayoutParams.WRAP_CONTENT,
             WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            // FLAG_NOT_FOCUSABLE is intentionally omitted so that text fields
+            // inside the overlay can receive keyboard focus and soft-keyboard input.
+            // FLAG_NOT_TOUCH_MODAL keeps touches outside the panel from being swallowed.
+            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
             PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
-            y = 160
-        }
+        ).apply { gravity = Gravity.BOTTOM }
 
-        val composeView = ComposeView(this).apply {
+        overlayView = ComposeView(this).apply {
             setViewTreeLifecycleOwner(lifecycleOwner)
             setViewTreeSavedStateRegistryOwner(lifecycleOwner)
             setContent {
                 AppTheme {
-                    FeedbackToast(
-                        message = message,
-                        onDismiss = {
-                            removeFeedbackOverlay()
-                            stopSelf()
-                        }
-                    )
+                    OverlayPanel(mode = mode, onDismiss = { removeOverlay() }, onSaved = {
+                        // 1. Remove the input panel view first (without stopping the service)
+                        overlayView?.let { windowManager.removeView(it) }
+                        overlayView = null
+                        // 2. Refresh the widget
+                        TaskWidgetProvider.sendRefreshBroadcast(applicationContext)
+                        // 3. Show the toast (service stays alive for the duration)
+                        showFeedbackOverlay(it)
+                    })
                 }
             }
         }
-
-        feedbackView = composeView
-        windowManager.addView(composeView, params)
+        windowManager.addView(overlayView, params)
     }
 
-    // ── Compose UI ────────────────────────────────────────────────────────────
+    private fun removeOverlay() {
+        overlayView?.let { windowManager.removeView(it) }
+        overlayView = null
+        // Only stop the service if there is no feedback toast still showing
+        if (feedbackView == null) stopSelf()
+    }
 
-    /**
-     * Floating animated toast that floats upward and fades out, then calls
-     * [onDismiss] so the WindowManager view can be removed without opening the app.
-     */
-    @Composable
-    private fun FeedbackToast(message: String, onDismiss: () -> Unit) {
-        val yOffset = remember { Animatable(0f) }
-        val alpha   = remember { Animatable(1f) }
-
-        LaunchedEffect(Unit) {
-            yOffset.animateTo(
-                targetValue = -120f,
-                animationSpec = tween(durationMillis = 1500)
-            )
-            alpha.animateTo(
-                targetValue = 0f,
-                animationSpec = tween(durationMillis = 400)
-            )
-            onDismiss()
+    private fun showFeedbackOverlay(message: String) {
+        if (message.isBlank() || feedbackView != null) {
+            removeOverlay()
+            return
         }
+        val params = WindowManager.LayoutParams(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+            PixelFormat.TRANSLUCENT
+        ).apply { gravity = Gravity.BOTTOM }
 
+        feedbackView = ComposeView(this).apply {
+            setViewTreeLifecycleOwner(lifecycleOwner)
+            setViewTreeSavedStateRegistryOwner(lifecycleOwner)
+            setContent { AppTheme { FeedbackToast(message) } }
+        }
+        windowManager.addView(feedbackView, params)
+
+        serviceScope.launch {
+            delay(3500) // 1s float-up animation + 2.5s hold
+            removeFeedbackOverlay()
+            removeOverlay()
+        }
+    }
+
+    private fun removeFeedbackOverlay() {
+        feedbackView?.let { windowManager.removeView(it) }
+        feedbackView = null
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        serviceScope.cancel()
+        removeOverlay()
+        removeFeedbackOverlay()
+        lifecycleOwner.lifecycleRegistry.currentState = Lifecycle.State.DESTROYED
+    }
+
+    override fun onBind(intent: Intent?): IBinder? = null
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(CHANNEL_ID, "Widget Overlays", NotificationManager.IMPORTANCE_LOW)
+            getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
+        }
+    }
+
+    @Composable
+    private fun greenTextFieldColors() = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = Color(0xFF10B981),
+        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+        focusedLabelColor = Color(0xFF10B981),
+        cursorColor = Color(0xFF10B981)
+    )
+
+    @Composable
+    private fun purpleTextFieldColors() = OutlinedTextFieldDefaults.colors(
+        focusedBorderColor = Color(0xFF7C3AED),
+        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+        focusedLabelColor = Color(0xFF7C3AED),
+        cursorColor = Color(0xFF7C3AED)
+    )
+
+    @Composable
+    private fun PanelSurface(content: @Composable ColumnScope.() -> Unit) {
+        Surface(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
+            color = MaterialTheme.colorScheme.surface,
+            contentColor = MaterialTheme.colorScheme.onSurface,
+            tonalElevation = 6.dp,
+            shadowElevation = 16.dp
+        ) {
+            Column(
+                modifier = Modifier.padding(start = 20.dp, end = 20.dp, bottom = 32.dp, top = 8.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                content = content
+            )
+        }
+    }
+
+    @Composable
+    private fun DragHandle() {
         Box(
             modifier = Modifier
-                .fillMaxWidth()
-                .height(200.dp)
-                .padding(bottom = 32.dp),
-            contentAlignment = Alignment.BottomCenter
-        ) {
-            Text(
-                text = message,
-                color = Color(0xFF10B981),
-                fontSize = 22.sp,
-                fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier
-                    .offset(y = yOffset.value.dp)
-                    .alpha(alpha.value)
-            )
-        }
+                .padding(vertical = 8.dp)
+                .width(40.dp)
+                .height(4.dp)
+                .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f), CircleShape)
+        )
     }
 
     @Composable
-    private fun OverlayPanel(
-        mode: OverlayMode,
-        onDismiss: () -> Unit,
-        onSaved: (String) -> Unit
-    ) {
+    private fun OverlayPanel(mode: OverlayMode, onDismiss: () -> Unit, onSaved: (String) -> Unit) {
         var visible by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) { visible = true }
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(Color.Black.copy(alpha = if (visible) 0.55f else 0f))
-                .clickable(onClick = onDismiss),
-            contentAlignment = Alignment.BottomCenter
+        AnimatedVisibility(
+            visible = visible,
+            enter = slideInVertically(initialOffsetY = { it }, animationSpec = tween(300, easing = FastOutSlowInEasing)),
+            exit = slideOutVertically(targetOffsetY = { it }, animationSpec = tween(260))
         ) {
-            AnimatedVisibility(
-                visible = visible,
-                enter = slideInVertically(
-                    initialOffsetY = { it },
-                    animationSpec = tween(320)
-                ),
-                exit = slideOutVertically(
-                    targetOffsetY = { it },
-                    animationSpec = tween(260)
-                )
-            ) {
-                Box(modifier = Modifier.clickable(enabled = false, onClick = {})) {
-                    when (mode) {
-                        OverlayMode.ADD_TASK  -> AddTaskPanel(onDismiss, onSaved)
-                        OverlayMode.MIC       -> MicPanel(onDismiss, onSaved)
-                        OverlayMode.ADD_EVENT -> AddEventPanel(onDismiss, onSaved)
-                    }
-
+            Box(modifier = Modifier.clickable(enabled = false, onClick = {})) {
+                when (mode) {
+                    OverlayMode.ADD_TASK -> AddTaskPanel(onDismiss, onSaved)
+                    OverlayMode.MIC -> MicPanel(onDismiss, onSaved)
+                    OverlayMode.ADD_EVENT -> AddEventPanel(onDismiss, onSaved)
                 }
             }
         }
     }
 
-    // ── Add Task panel ────────────────────────────────────────────────────────
-    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun AddTaskPanel(onDismiss: () -> Unit, onSaved: (String) -> Unit) {
-        var title      by remember { mutableStateOf("") }
-        var difficulty by remember { mutableStateOf("medium") }
-        var isSaving   by remember { mutableStateOf(false) }
-        val keyboard   = LocalSoftwareKeyboardController.current
+        var title by remember { mutableStateOf("") }
+        var isSaving by remember { mutableStateOf(false) }
+        val keyboard = LocalSoftwareKeyboardController.current
 
         fun save() {
             if (title.isBlank()) return
             isSaving = true
             serviceScope.launch(Dispatchers.IO) {
                 AppDatabase.getDatabase(applicationContext).taskDao().upsertTask(
-                    TaskEntity(
-                        id          = UUID.randomUUID().toString(),
-                        userId      = "local_user",
-                        title       = title.trim(),
-                        difficulty  = difficulty,
-                        status      = "pending",
-                        isCompleted = false
-                    )
+                    TaskEntity(id = UUID.randomUUID().toString(), userId = "local_user", title = title.trim(), difficulty = "medium")
                 )
                 launch(Dispatchers.Main) {
                     keyboard?.hide()
-                    // No toast for regular task add — just dismiss silently.
                     onSaved("")
                 }
             }
@@ -579,10 +385,7 @@ class WidgetOverlayService : Service() {
                 label = { Text("Task...") },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
-                    imeAction = ImeAction.Done
-                ),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
                 keyboardActions = KeyboardActions(onDone = { save() }),
                 colors = greenTextFieldColors()
             )
@@ -594,68 +397,45 @@ class WidgetOverlayService : Service() {
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
             ) {
-                Text(if (isSaving) "Saving…" else "Save Task",
-                    fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(if (isSaving) "Saving…" else "Save Task", fontWeight = FontWeight.Bold, fontSize = 15.sp)
             }
         }
     }
 
-    // ── Mic / Voice panel ─────────────────────────────────────────────────────
-    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun MicPanel(onDismiss: () -> Unit, onSaved: (String) -> Unit) {
-        val hasAudio = ContextCompat.checkSelfPermission(
-            applicationContext, android.Manifest.permission.RECORD_AUDIO
-        ) == PackageManager.PERMISSION_GRANTED
-
-        if (!hasAudio) {
-            startActivity(
-                Intent(applicationContext, MicPermissionActivity::class.java)
-                    .addFlags(
-                        Intent.FLAG_ACTIVITY_NEW_TASK or
-                                Intent.FLAG_ACTIVITY_NO_HISTORY or
-                                Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                    )
-            )
-            onDismiss()
-            return
-        }
-
-        var title          by remember { mutableStateOf("") }
-        var isListening    by remember { mutableStateOf(true) }
-        var isSaving       by remember { mutableStateOf(false) }
-        var recognizerRef  by remember { mutableStateOf<SpeechRecognizer?>(null) }
-        val keyboard       = LocalSoftwareKeyboardController.current
+        var title by remember { mutableStateOf("") }
+        var isListening by remember { mutableStateOf(true) }
+        var isSaving by remember { mutableStateOf(false) }
+        var recognizerRef by remember { mutableStateOf<SpeechRecognizer?>(null) }
+        val keyboard = LocalSoftwareKeyboardController.current
 
         DisposableEffect(Unit) {
             val recognizer = SpeechRecognizer.createSpeechRecognizer(applicationContext)
             recognizerRef = recognizer
             val recognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             }
             recognizer.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: android.os.Bundle?) { isListening = true }
+                override fun onReadyForSpeech(params: Bundle?) { isListening = true }
                 override fun onBeginningOfSpeech() { isListening = true }
                 override fun onRmsChanged(rmsdB: Float) {}
                 override fun onBufferReceived(buffer: ByteArray?) {}
-                override fun onEndOfSpeech() {}
+                override fun onEndOfSpeech() { isListening = false }
                 override fun onError(error: Int) { isListening = false }
-                override fun onResults(results: android.os.Bundle?) {
-                    val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    if (!matches.isNullOrEmpty()) title = matches[0]
+                override fun onResults(results: Bundle?) {
+                    results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.let { title = it }
                     isListening = false
                 }
-                override fun onPartialResults(partialResults: android.os.Bundle?) {
-                    val partial = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                    if (!partial.isNullOrEmpty()) title = partial[0]
+                override fun onPartialResults(partialResults: Bundle?) {
+                    partialResults?.getStringArrayList(RecognizerIntent.EXTRA_PARTIAL_RESULTS)?.firstOrNull()?.let { title = it }
                 }
-                override fun onEvent(eventType: Int, params: android.os.Bundle?) {}
+                override fun onEvent(eventType: Int, params: Bundle?) {}
             })
             recognizer.startListening(recognizerIntent)
-            onDispose { recognizerRef = null; recognizer.destroy() }
+            onDispose { recognizer.destroy() }
         }
 
         fun save() {
@@ -663,20 +443,12 @@ class WidgetOverlayService : Service() {
             isSaving = true
             serviceScope.launch(Dispatchers.IO) {
                 AppDatabase.getDatabase(applicationContext).taskDao().upsertTask(
-                    TaskEntity(
-                        id          = UUID.randomUUID().toString(),
-                        userId      = "local_user",
-                        title       = title.trim(),
-                        difficulty  = "medium",
-                        status      = "pending",
-                        isCompleted = false
-                    )
+                    TaskEntity(id = UUID.randomUUID().toString(), userId = "local_user", title = title.trim(), difficulty = "medium")
                 )
                 launch(Dispatchers.Main) { keyboard?.hide(); onSaved("") }
             }
         }
 
-        // ── Re-start listening when user taps mic icon ───────────────────────
         fun startListening() {
             isListening = true
             val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
@@ -689,94 +461,32 @@ class WidgetOverlayService : Service() {
 
         PanelSurface {
             DragHandle()
-
-            // ── Header: close button only (no title) ─────────────────────────
             Box(modifier = Modifier.fillMaxWidth()) {
-                IconButton(
-                    onClick = onDismiss,
-                    modifier = Modifier.align(Alignment.TopEnd)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = "Close",
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.TopEnd)) {
+                    Icon(Icons.Default.Close, "Close", tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-
             Spacer(Modifier.height(4.dp))
-
-            // ── Listening indicator: dancing dots OR mic icon ─────────────────
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(56.dp),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
                 if (isListening) {
-                    // Three animated dots in app green/purple/green
-                    val dotColors = listOf(
-                        Color(0xFF10B981),
-                        Color(0xFF7C3AED),
-                        Color(0xFF10B981)
-                    )
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        dotColors.forEachIndexed { index, dotColor ->
-                            val infiniteTransition = rememberInfiniteTransition(label = "dot$index")
-                            val yOffset by infiniteTransition.animateFloat(
-                                initialValue = 0f,
-                                targetValue  = -12f,
-                                animationSpec = infiniteRepeatable(
-                                    animation = tween(
-                                        durationMillis = 500,
-                                        easing = FastOutSlowInEasing
-                                    ),
-                                    repeatMode = RepeatMode.Reverse,
-                                    initialStartOffset = StartOffset(index * 160)
-                                ),
-                                label = "dot${index}Y"
-                            )
-                            Box(
-                                modifier = Modifier
-                                    .size(12.dp)
-                                    .offset(y = androidx.compose.ui.unit.Dp(yOffset))
-                                    .clip(CircleShape)
-                                    .background(dotColor)
-                            )
-                        }
-                    }
+                    PulsingMicIndicator()
                 } else {
-                    // Idle: tappable mic icon to re-start listening
-                    IconButton(onClick = { startListening() }) {
-                        Icon(
-                            imageVector = Icons.Default.Mic,
-                            contentDescription = "Record again",
-                            tint = Color(0xFF10B981),
-                            modifier = Modifier.size(36.dp)
-                        )
+                    IconButton(onClick = { startListening() }, modifier = Modifier.size(64.dp)) {
+                        Icon(Icons.Default.Mic, "Start Listening", modifier = Modifier.fillMaxSize(), tint = Color(0xFF10B981))
                     }
                 }
             }
-
             Spacer(Modifier.height(12.dp))
-
             OutlinedTextField(
                 value = title,
-                onValueChange = { title = it; isListening = false },
-                placeholder = { Text("Audio...") },
-                singleLine = true,
+                onValueChange = { title = it },
+                label = { Text("Voice to text...") },
                 modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
-                    imeAction = ImeAction.Done
-                ),
-                keyboardActions = KeyboardActions(onDone = { save() }),
-                colors = greenTextFieldColors()
+                colors = greenTextFieldColors(),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { save() })
             )
-            Spacer(Modifier.height(20.dp))
+            Spacer(Modifier.height(16.dp))
             Button(
                 onClick = { save() },
                 enabled = title.isNotBlank() && !isSaving,
@@ -784,589 +494,316 @@ class WidgetOverlayService : Service() {
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
             ) {
-                Text(if (isSaving) "Saving…" else "Save Task",
-                    fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                Text(if (isSaving) "Saving…" else "Save Task", fontWeight = FontWeight.Bold, fontSize = 15.sp)
             }
         }
     }
 
-    // ── Add Calendar Event panel ──────────────────────────────────────────────
-    /**
-     * Three-step inline panel — NO Dialog wrappers.
-     *
-     * Compose's Dialog() calls android.app.Dialog.show() which requires an
-     * Activity window token. Inside a WindowManager overlay service the token
-     * is null → BadTokenException crash. The fix is to render DatePicker and
-     * TimeInput as plain inline Compose content, controlled by EventStep state.
-     *
-     * TITLE → user types title, taps "Set Date & Time"
-     * DATE  → inline DatePicker, taps "Next: Set Time"
-     * TIME  → "All day" toggle + optional inline TimeInput, taps "Create Event"
-     */
+    @Composable
+    private fun PulsingMicIndicator() {
+        val infiniteTransition = rememberInfiniteTransition(label = "")
+        val circleCount = 3
+        val circleDelay = 300
+
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+            repeat(circleCount) {
+                val alpha by infiniteTransition.animateFloat(
+                    initialValue = 0.2f,
+                    targetValue = 1f,
+                    animationSpec = infiniteRepeatable(
+                        animation = tween(durationMillis = circleDelay * circleCount, easing = LinearEasing),
+                        repeatMode = RepeatMode.Reverse,
+                        initialStartOffset = StartOffset(circleDelay * it)
+                    ), label = ""
+                )
+                Box(modifier = Modifier.padding(horizontal = 4.dp).size(12.dp).alpha(alpha).background(Color(0xFF10B981), CircleShape))
+            }
+        }
+    }
+
+    @Composable
+    private fun TimeInputCustom(state: EventState) {
+        val customTextSelectionColors = TextSelectionColors(
+            handleColor = Color.White,
+            backgroundColor = Color.White.copy(alpha = 0.4f)
+        )
+
+        CompositionLocalProvider(LocalTextSelectionColors provides customTextSelectionColors) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.Center,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Hour Field
+                BasicTextField(
+                    value = state.hour.toString().padStart(2, '0'),
+                    onValueChange = { value ->
+                        state.hour = value.filter { it.isDigit() }.take(2).toIntOrNull() ?: 0
+                    },
+                    textStyle = TextStyle(
+                        color = Color.White,
+                        fontSize = 48.sp,
+                        textAlign = TextAlign.Center
+                    ),
+                    modifier = Modifier
+                        .width(110.dp)
+                        .height(80.dp)
+                        .background(Color(0xFF7C3AED), RoundedCornerShape(12.dp))
+                        .padding(8.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                    cursorBrush = SolidColor(Color.White)
+                )
+                Spacer(modifier = Modifier.width(16.dp))
+                // Minute Field
+                BasicTextField(
+                    value = state.minute.toString().padStart(2, '0'),
+                    onValueChange = { value ->
+                        state.minute = value.filter { it.isDigit() }.take(2).toIntOrNull() ?: 0
+                    },
+                    textStyle = TextStyle(
+                        color = MaterialTheme.colorScheme.onSurface,
+                        fontSize = 48.sp,
+                        textAlign = TextAlign.Center
+                    ),
+                    modifier = Modifier
+                        .width(110.dp)
+                        .height(80.dp)
+                        .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(12.dp))
+                        .padding(8.dp),
+                    keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
+                    cursorBrush = SolidColor(Color.White)
+                )
+            }
+        }
+    }
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun AddEventPanel(onDismiss: () -> Unit, onSaved: (String) -> Unit) {
+        val eventState = remember { EventState() }
+        var currentStep by remember { mutableStateOf(EventStep.TITLE) }
+        val keyboard = LocalSoftwareKeyboardController.current
 
-        var eventTitle by remember { mutableStateOf("") }
-        var isSaving   by remember { mutableStateOf(false) }
-        var isAllDay   by remember { mutableStateOf(false) }
-        var step       by remember { mutableStateOf(EventStep.TITLE) }
-        val keyboard   = LocalSoftwareKeyboardController.current
-
-        // These are hoisted outside the `when` so their state survives step transitions.
-        val datePickerState = rememberDatePickerState(
-            selectableDates = object : SelectableDates {
-                override fun isSelectableDate(utcTimeMillis: Long): Boolean {
-                    val todayUtc = java.time.LocalDate.now()
-                        .atStartOfDay(ZoneId.of("UTC"))
-                        .toInstant()
-                        .toEpochMilli()
-                    return utcTimeMillis >= todayUtc
-                }
-            }
-        )
-        val timePickerState = rememberTimePickerState(
-            initialHour = 9, initialMinute = 0, is24Hour = true
-        )
-
-        // ── Helper: resolve the primary (or first available) calendar ID ──────
-        suspend fun resolveCalendarId(): Long? {
-            val projection = arrayOf(CalendarContract.Calendars._ID)
-            val cr = contentResolver
-            return withContext(Dispatchers.IO) {
-                try {
-                    cr.query(
-                        CalendarContract.Calendars.CONTENT_URI, projection,
-                        "${CalendarContract.Calendars.IS_PRIMARY} = 1", null, null
-                    )?.use { c -> if (c.moveToFirst()) c.getLong(0) else null }
-                } catch (e: Exception) { Log.e(TAG, "Primary calendar query failed", e); null }
-                    ?: try {
-                        cr.query(
-                            CalendarContract.Calendars.CONTENT_URI, projection, null, null, null
-                        )?.use { c -> if (c.moveToFirst()) c.getLong(0) else null }
-                    } catch (e: Exception) { Log.e(TAG, "Any-calendar query failed", e); null }
-            }
-        }
-
-        // ── Helper: request a sync on the calendar account after inserting ────
-        suspend fun requestSync(calendarId: Long) {
-            val cr = contentResolver
-            withContext(Dispatchers.IO) {
-                try {
-                    cr.query(
-                        CalendarContract.Calendars.CONTENT_URI,
-                        arrayOf(
-                            CalendarContract.Calendars.ACCOUNT_NAME,
-                            CalendarContract.Calendars.ACCOUNT_TYPE
-                        ),
-                        "${CalendarContract.Calendars._ID} = ?",
-                        arrayOf(calendarId.toString()), null
-                    )?.use { c ->
-                        if (c.moveToFirst()) {
-                            val account = Account(c.getString(0), c.getString(1))
-                            ContentResolver.requestSync(
-                                account, CalendarContract.AUTHORITY,
-                                Bundle().apply {
-                                    putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true)
-                                    putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true)
-                                }
-                            )
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Sync request failed (non-critical)", e)
-                }
-            }
-        }
-
-        // ── Timed event creation ──────────────────────────────────────────────
-        fun createEvent() {
-            if (eventTitle.isBlank()) return
-            val dateMillis = datePickerState.selectedDateMillis ?: return
-
-            // Guard: calendar permissions must be granted at runtime.
-            val hasCalendarPerms = ContextCompat.checkSelfPermission(
-                applicationContext, android.Manifest.permission.READ_CALENDAR
-            ) == PackageManager.PERMISSION_GRANTED &&
-                    ContextCompat.checkSelfPermission(
-                        applicationContext, android.Manifest.permission.WRITE_CALENDAR
-                    ) == PackageManager.PERMISSION_GRANTED
-
-            if (!hasCalendarPerms) {
-                startActivity(
-                    Intent(applicationContext, CalendarPermissionActivity::class.java)
-                        .addFlags(
-                            Intent.FLAG_ACTIVITY_NEW_TASK or
-                                    Intent.FLAG_ACTIVITY_NO_HISTORY or
-                                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                        )
-                )
-                // Dismiss the panel — user can re-open it after granting.
-                onDismiss()
-                return
-            }
-
-            val dueDateTime = Instant.ofEpochMilli(dateMillis)
-                .atZone(ZoneId.systemDefault())
-                .toLocalDateTime()
-                .withHour(timePickerState.hour)
-                .withMinute(timePickerState.minute)
-                .withSecond(0).withNano(0)
-
-            isSaving = true
-            serviceScope.launch {
-                val epochMillis = dueDateTime
-                    .atZone(ZoneId.systemDefault())
-                    .toInstant()
-                    .toEpochMilli()
-                val calendarId = resolveCalendarId()
-
-                if (calendarId != null) {
-                    val values = ContentValues().apply {
-                        put(CalendarContract.Events.CALENDAR_ID, calendarId)
-                        put(CalendarContract.Events.TITLE, eventTitle.trim())
-                        put(CalendarContract.Events.DTSTART, epochMillis)
-                        put(CalendarContract.Events.DTEND, epochMillis + 3_600_000L)
-                        put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
-                    }
-                    val uri = withContext(Dispatchers.IO) {
-                        try { contentResolver.insert(CalendarContract.Events.CONTENT_URI, values) }
-                        catch (e: Exception) { Log.e(TAG, "Calendar insert failed", e); null }
-                    }
-                    if (uri != null) {
-                        requestSync(calendarId)
-                        // Also insert a TaskEntity so the widget list reflects the event.
-                        withContext(Dispatchers.IO) {
-                            AppDatabase.getDatabase(applicationContext).taskDao().upsertTask(
-                                TaskEntity(
-                                    id          = UUID.randomUUID().toString(),
-                                    userId      = "local_user",
-                                    title       = eventTitle.trim(),
-                                    difficulty  = "medium",
-                                    status      = "event",
-                                    isCompleted = false,
-                                    dueDate     = epochMillis
-                                )
-                            )
-                        }
-                    } else {
-                        Log.e(TAG, "Calendar insert returned null URI — event not saved")
-                    }
+        fun saveEvent() {
+            if (eventState.title.isBlank()) return
+            eventState.isSaving = true
+            serviceScope.launch(Dispatchers.IO) {
+                val startMillis = if (eventState.isAllDay) {
+                    eventState.selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 } else {
-                    Log.e(TAG, "No calendar found — cannot insert event directly")
+                    eventState.selectedDate.atTime(eventState.hour, eventState.minute).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
                 }
 
-                keyboard?.hide()
-                onSaved("Added to Calendar")
-            }
-        }
+                // 1. Insert into the Android system calendar
+                val values = ContentValues().apply {
+                    put(CalendarContract.Events.DTSTART, startMillis)
+                    put(CalendarContract.Events.DTEND, startMillis + 3_600_000L)
+                    put(CalendarContract.Events.TITLE, eventState.title)
+                    put(CalendarContract.Events.CALENDAR_ID, 1)
+                    put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+                    put(CalendarContract.Events.ALL_DAY, if (eventState.isAllDay) 1 else 0)
+                }
+                try {
+                    contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
+                } catch (e: SecurityException) {
+                    Log.e(TAG, "Failed to insert calendar event", e)
+                }
 
-        // ── All-day event creation ────────────────────────────────────────────
-        fun createAllDayEvent() {
-            if (eventTitle.isBlank()) return
-            val dateMillis = datePickerState.selectedDateMillis ?: return
-
-            // Guard: calendar permissions must be granted at runtime.
-            val hasCalendarPerms = ContextCompat.checkSelfPermission(
-                applicationContext, android.Manifest.permission.READ_CALENDAR
-            ) == PackageManager.PERMISSION_GRANTED &&
-                    ContextCompat.checkSelfPermission(
-                        applicationContext, android.Manifest.permission.WRITE_CALENDAR
-                    ) == PackageManager.PERMISSION_GRANTED
-
-            if (!hasCalendarPerms) {
-                startActivity(
-                    Intent(applicationContext, CalendarPermissionActivity::class.java)
-                        .addFlags(
-                            Intent.FLAG_ACTIVITY_NEW_TASK or
-                                    Intent.FLAG_ACTIVITY_NO_HISTORY or
-                                    Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS
-                        )
+                // 2. Also insert a TaskEntity into Room so it appears in the
+                //    app task list and the home-screen widget
+                AppDatabase.getDatabase(applicationContext).taskDao().upsertTask(
+                    TaskEntity(
+                        id = UUID.randomUUID().toString(),
+                        userId = "local_user",
+                        title = eventState.title.trim(),
+                        difficulty = "medium",
+                        dueDate = startMillis,
+                        category = "Calendar"
+                    )
                 )
-                onDismiss()
-                return
-            }
 
-            // All-day events use UTC midnight boundaries for the chosen local date.
-            val localDate = Instant.ofEpochMilli(dateMillis)
-                .atZone(ZoneId.systemDefault())
-                .toLocalDate()
-            val startUtc = localDate
-                .atStartOfDay(ZoneOffset.UTC)
-                .toInstant()
-                .toEpochMilli()
-            val endUtc = startUtc + 86_400_000L // exactly one day
-
-            isSaving = true
-            serviceScope.launch {
-                val calendarId = resolveCalendarId()
-
-                if (calendarId != null) {
-                    val values = ContentValues().apply {
-                        put(CalendarContract.Events.CALENDAR_ID, calendarId)
-                        put(CalendarContract.Events.TITLE, eventTitle.trim())
-                        put(CalendarContract.Events.DTSTART, startUtc)
-                        put(CalendarContract.Events.DTEND, endUtc)
-                        put(CalendarContract.Events.ALL_DAY, 1)
-                        put(CalendarContract.Events.EVENT_TIMEZONE, "UTC")
-                    }
-                    val uri = withContext(Dispatchers.IO) {
-                        try { contentResolver.insert(CalendarContract.Events.CONTENT_URI, values) }
-                        catch (e: Exception) { Log.e(TAG, "All-day calendar insert failed", e); null }
-                    }
-                    if (uri != null) {
-                        requestSync(calendarId)
-                        // Also insert a TaskEntity so the widget list reflects the event.
-                        withContext(Dispatchers.IO) {
-                            AppDatabase.getDatabase(applicationContext).taskDao().upsertTask(
-                                TaskEntity(
-                                    id          = UUID.randomUUID().toString(),
-                                    userId      = "local_user",
-                                    title       = eventTitle.trim(),
-                                    difficulty  = "medium",
-                                    status      = "event",
-                                    isCompleted = false,
-                                    dueDate     = startUtc
-                                )
-                            )
-                        }
-                    } else {
-                        Log.e(TAG, "All-day calendar insert returned null URI — event not saved")
-                    }
-                } else {
-                    Log.e(TAG, "No calendar found — cannot insert all-day event directly")
+                withContext(Dispatchers.Main) {
+                    keyboard?.hide()
+                    onSaved("Added to Calendar")
                 }
-
-                keyboard?.hide()
-                onSaved("Added to Calendar")
             }
         }
 
         PanelSurface {
             DragHandle()
-
-            // ── Header ────────────────────────────────────────────────────────
-            // Title text removed; only the calendar icon + back/close button remain.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Icon(
-                    imageVector = Icons.Outlined.CalendarMonth,
-                    contentDescription = null,
-                    tint = Color(0xFF7C3AED),
-                    modifier = Modifier.size(22.dp)
-                )
-                TextButton(onClick = {
-                    if (step != EventStep.TITLE) step = EventStep.TITLE else onDismiss()
-                }) {
-                    Text(
-                        if (step != EventStep.TITLE) "Back" else "✕",
-                        fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                }
-            }
-
-            Spacer(Modifier.height(16.dp))
-
-            // ── Step content ──────────────────────────────────────────────────
-            when (step) {
-
-                // Step 1: title entry
+            when (currentStep) {
                 EventStep.TITLE -> {
+                    Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
-                        value = eventTitle,
-                        onValueChange = { eventTitle = it },
-                        placeholder = { Text("Event...") },
-                        singleLine = true,
+                        value = eventState.title,
+                        onValueChange = { eventState.title = it },
+                        label = { Text("Event Title...") },
                         modifier = Modifier.fillMaxWidth(),
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Sentences,
-                            imeAction = ImeAction.Next
-                        ),
-                        keyboardActions = KeyboardActions(onNext = {
-                            if (eventTitle.isNotBlank()) {
-                                keyboard?.hide()
-                                step = EventStep.DATE
-                            }
-                        }),
-                        colors = outlinedTextFieldColors()
+                        colors = purpleTextFieldColors(),
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Next),
+                        keyboardActions = KeyboardActions(onNext = { currentStep = EventStep.DATE })
                     )
                     Spacer(Modifier.height(16.dp))
                     Button(
-                        onClick = {
-                            keyboard?.hide()
-                            step = EventStep.DATE
-                        },
-                        enabled = eventTitle.isNotBlank() && !isSaving,
+                        onClick = { currentStep = EventStep.DATE },
+                        enabled = eventState.title.isNotBlank(),
                         modifier = Modifier.fillMaxWidth().height(50.dp),
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
                     ) {
-                        Icon(
-                            imageVector = Icons.Outlined.EditCalendar,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "Set Date & Time",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        )
+                        Text("Set Date & Time", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                 }
-
-                // Step 2: inline date picker (no Dialog)
                 EventStep.DATE -> {
-                    val purple = Color(0xFF7C3AED)
                     DatePicker(
-                        state = datePickerState,
-                        modifier = Modifier.fillMaxWidth(),
-                        showModeToggle = false,
+                        state = rememberDatePickerState(initialSelectedDateMillis = eventState.selectedDate.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()),
+                        modifier = Modifier.padding(0.dp),
+                        title = null, headline = null, showModeToggle = false,
                         colors = DatePickerDefaults.colors(
-                            // Selected day circle
-                            selectedDayContainerColor    = purple,
-                            selectedDayContentColor      = Color.White,
-                            // Today ring (unselected)
-                            todayContentColor            = purple,
-                            todayDateBorderColor         = purple,
-                            // Year/month picker selected item
-                            selectedYearContainerColor   = purple,
-                            selectedYearContentColor     = Color.White,
-                            // Date text-input mode border & label
-                            dateTextFieldColors          = OutlinedTextFieldDefaults.colors(
-                                focusedBorderColor   = purple,
-                                unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-                                focusedLabelColor    = purple,
-                                unfocusedLabelColor  = MaterialTheme.colorScheme.onSurfaceVariant,
-                                cursorColor          = purple,
-                                focusedTextColor     = MaterialTheme.colorScheme.onSurface,
-                                unfocusedTextColor   = MaterialTheme.colorScheme.onSurface
-                            )
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            selectedDayContainerColor = Color(0xFF7C3AED),
+                            // Today's date ring matches the brand purple, not system green
+                            todayDateBorderColor = MaterialTheme.colorScheme.onSurface,
+                            todayContentColor = MaterialTheme.colorScheme.onSurface
                         )
                     )
                     Spacer(Modifier.height(8.dp))
-                    Button(
-                        onClick = { step = EventStep.TIME },
-                        enabled = datePickerState.selectedDateMillis != null,
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text("Next: Set Time", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        Button(
+                            onClick = { currentStep = EventStep.TITLE },
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White,
+                                contentColor = Color(0xFF7C3AED)
+                            )
+                        ) {
+                            Text("Back", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF7C3AED))
+                        }
+                        Button(
+                            onClick = { currentStep = EventStep.TIME },
+                            modifier = Modifier.weight(2f).height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                        ) {
+                            Text("Next: Set Time", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
                     }
                 }
-
-                // Step 3: "All day" toggle + optional inline TimeInput → creates event
                 EventStep.TIME -> {
-                    // ── All-day toggle ────────────────────────────────────────
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant)
-                            .padding(horizontal = 14.dp, vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Text(
-                            "All day",
-                            fontWeight = FontWeight.Medium,
-                            fontSize = 15.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
+                        Text("All Day", style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.weight(1f))
                         Switch(
-                            checked = isAllDay,
-                            onCheckedChange = { isAllDay = it },
+                            checked = eventState.isAllDay,
+                            onCheckedChange = { eventState.isAllDay = it },
                             colors = SwitchDefaults.colors(
-                                checkedThumbColor   = Color.White,
-                                checkedTrackColor   = Color(0xFF7C3AED),
-                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF7C3AED),
+                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
                                 uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
                             )
                         )
                     }
-
-                    // ── Time picker (hidden when all-day is on) ───────────────
-                    if (!isAllDay) {
-                        Spacer(Modifier.height(12.dp))
-                        // Wrap in a MaterialTheme override so the selected-box border
-                        // (drawn from colorScheme.primary internally by Material3) is
-                        // purple rather than the app's default green.
-                        MaterialTheme(
-                            colorScheme = MaterialTheme.colorScheme.copy(
-                                primary   = Color(0xFF7C3AED),
-                                secondary = Color(0xFF7C3AED)
-                            )
-                        ) {
-                            TimeInput(
-                                state = timePickerState,
-                                modifier = Modifier.align(Alignment.CenterHorizontally),
-                                colors = TimePickerDefaults.colors(
-                                    timeSelectorSelectedContainerColor     = Color(0xFF7C3AED),
-                                    timeSelectorSelectedContentColor       = Color.White,
-                                    timeSelectorUnselectedContainerColor   = MaterialTheme.colorScheme.surfaceVariant,
-                                    timeSelectorUnselectedContentColor     = MaterialTheme.colorScheme.onSurface,
-                                    periodSelectorSelectedContainerColor   = Color(0xFF7C3AED),
-                                    periodSelectorSelectedContentColor     = Color.White,
-                                    periodSelectorUnselectedContainerColor = MaterialTheme.colorScheme.surfaceVariant,
-                                    periodSelectorUnselectedContentColor   = MaterialTheme.colorScheme.onSurface,
-                                    periodSelectorBorderColor              = Color(0xFF7C3AED),
-                                    clockDialColor                         = MaterialTheme.colorScheme.surfaceVariant,
-                                    clockDialSelectedContentColor          = Color.White,
-                                    clockDialUnselectedContentColor        = MaterialTheme.colorScheme.onSurface,
-                                    selectorColor                          = Color(0xFF7C3AED)
-                                )
-                            )
+                    AnimatedVisibility(visible = !eventState.isAllDay) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Spacer(Modifier.height(24.dp))
+                            TimeInputCustom(state = eventState)
+                            Spacer(Modifier.height(24.dp))
                         }
                     }
+                    if (eventState.isAllDay) Spacer(Modifier.height(24.dp))
 
-                    Spacer(Modifier.height(16.dp))
-                    Button(
-                        onClick = { if (isAllDay) createAllDayEvent() else createEvent() },
-                        enabled = !isSaving,
-                        modifier = Modifier.fillMaxWidth().height(50.dp),
-                        shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text(
-                            if (isSaving) "Creating…" else "Create Event",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        )
+                        Button(
+                            onClick = { currentStep = EventStep.DATE },
+                            modifier = Modifier.weight(1f).height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Color.White,
+                                contentColor = Color(0xFF7C3AED)
+                            )
+                        ) {
+                            Text("Back", fontWeight = FontWeight.Bold, fontSize = 15.sp, color = Color(0xFF7C3AED))
+                        }
+                        Button(
+                            onClick = { saveEvent() },
+                            enabled = !eventState.isSaving,
+                            modifier = Modifier.weight(2f).height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
+                        ) {
+                            Text(if (eventState.isSaving) "Saving..." else "Create Event", fontWeight = FontWeight.Bold, fontSize = 15.sp)
+                        }
                     }
                 }
             }
         }
     }
 
-    // ── Shared Compose components ─────────────────────────────────────────────
     @Composable
-    private fun PanelSurface(content: @Composable ColumnScope.() -> Unit) {
-        Column(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-                .background(MaterialTheme.colorScheme.surface)
-                .padding(horizontal = 20.dp, vertical = 12.dp)
-                .navigationBarsPadding()
-                .imePadding(),
-            content = content
-        )
-    }
+    private fun FeedbackToast(message: String) {
+        val purple = Color(0xFF7C3AED)
+        // offsetY starts at 600 (below resting point) and animates to 0
+        val offsetY = remember { Animatable(600f) }
+        LaunchedEffect(Unit) {
+            offsetY.animateTo(
+                targetValue = 0f,
+                animationSpec = tween(durationMillis = 2000, easing = FastOutSlowInEasing)
+            )
+        }
 
-    @Composable
-    private fun DragHandle() {
+        // Alpha is derived from slide progress: 0f at start, 1f at rest
+        // progress = 1 - (offsetY / 600), clamped to [0, 1]
+        val alpha = ((1f - offsetY.value / 600f).coerceIn(0f, 1f))
+
+        // Full-screen box so we can position the pill above the dock
         Box(
-            modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
-            contentAlignment = Alignment.Center
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.BottomCenter
         ) {
             Box(
                 modifier = Modifier
-                    .width(40.dp).height(4.dp)
-                    .clip(RoundedCornerShape(2.dp))
-                    .background(MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
-            )
-        }
-    }
-
-    @Composable
-    private fun PanelTitle(title: String, onDismiss: () -> Unit) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(title, fontWeight = FontWeight.Bold, fontSize = 18.sp,
-                color = MaterialTheme.colorScheme.onSurface)
-            TextButton(onClick = onDismiss) {
-                Text("✕", fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    .padding(bottom = 160.dp)
+                    .offset { IntOffset(x = 0, y = offsetY.value.toInt()) }
+                    // Fade in tied to slide progress — fully opaque at final position
+                    .alpha(alpha)
+                    // Glow layers
+                    .shadow(elevation = 24.dp, spotColor = purple, ambientColor = purple, shape = RoundedCornerShape(20.dp))
+                    .shadow(elevation = 16.dp, spotColor = purple, ambientColor = purple, shape = RoundedCornerShape(20.dp))
+                    .shadow(elevation = 8.dp, spotColor = Color.White, ambientColor = Color.White, shape = RoundedCornerShape(20.dp))
+                    // White background + purple text
+                    .background(color = Color.White, shape = RoundedCornerShape(20.dp))
+                    .defaultMinSize(minWidth = 60.dp, minHeight = 60.dp)
+                    .padding(horizontal = 24.dp, vertical = 0.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = message,
+                    color = purple,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp
+                )
             }
-        }
-    }
-
-    @Composable
-    private fun DifficultyChip(
-        label: String,
-        value: String,
-        activeColor: Color,
-        selected: String,
-        onSelect: (String) -> Unit
-    ) {
-        val isSelected = selected == value
-        Box(
-            modifier = Modifier
-                .clip(RoundedCornerShape(10.dp))
-                .background(if (isSelected) activeColor else MaterialTheme.colorScheme.surfaceVariant)
-                .clickable { onSelect(value) }
-                .padding(horizontal = 16.dp, vertical = 8.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(label, fontSize = 13.sp, fontWeight = FontWeight.Medium,
-                color = if (isSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-
-    @OptIn(ExperimentalMaterial3Api::class)
-    @Composable
-    private fun outlinedTextFieldColors() = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor   = Color(0xFF7C3AED),
-        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-        focusedLabelColor    = Color(0xFF7C3AED),
-        unfocusedLabelColor  = MaterialTheme.colorScheme.onSurfaceVariant,
-        cursorColor          = Color(0xFF7C3AED),
-        focusedTextColor     = MaterialTheme.colorScheme.onSurface,
-        unfocusedTextColor   = MaterialTheme.colorScheme.onSurface
-    )
-
-    @Composable
-    private fun greenTextFieldColors() = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor   = Color(0xFF10B981),
-        unfocusedBorderColor = MaterialTheme.colorScheme.outline,
-        focusedLabelColor    = Color(0xFF10B981),
-        unfocusedLabelColor  = MaterialTheme.colorScheme.onSurfaceVariant,
-        cursorColor          = Color(0xFF10B981),
-        focusedTextColor     = MaterialTheme.colorScheme.onSurface,
-        unfocusedTextColor   = MaterialTheme.colorScheme.onSurface
-    )
-
-    @Composable
-    private fun PulsingMicIndicator() {
-        val infiniteTransition = rememberInfiniteTransition(label = "mic_pulse")
-        val scale by infiniteTransition.animateFloat(
-            initialValue = 1f,
-            targetValue  = 1.3f,
-            animationSpec = infiniteRepeatable(
-                animation  = tween(600, easing = FastOutSlowInEasing),
-                repeatMode = RepeatMode.Reverse
-            ),
-            label = "mic_scale"
-        )
-        Box(
-            modifier = Modifier
-                .size((48 * scale).dp)
-                .clip(CircleShape)
-                .background(Color(0xFF10B981).copy(alpha = 0.15f)),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Default.Mic,
-                contentDescription = "Listening",
-                tint = Color(0xFF10B981),
-                modifier = Modifier.size(28.dp)
-            )
         }
     }
 }
 
-// ── Enums ─────────────────────────────────────────────────────────────────────
 enum class OverlayMode { ADD_TASK, MIC, ADD_EVENT }
-
-/**
- * Controls which inline step is shown inside [WidgetOverlayService.AddEventPanel].
- * Using an enum instead of boolean flags avoids impossible state combinations.
- */
 enum class EventStep { TITLE, DATE, TIME }
+
+class EventState {
+    var title by mutableStateOf("")
+    var selectedDate by mutableStateOf(LocalDateTime.now().toLocalDate())
+    var hour by mutableStateOf(LocalDateTime.now().hour)
+    var minute by mutableStateOf(LocalDateTime.now().minute)
+    var isAllDay by mutableStateOf(false)
+    var isSaving by mutableStateOf(false)
+}

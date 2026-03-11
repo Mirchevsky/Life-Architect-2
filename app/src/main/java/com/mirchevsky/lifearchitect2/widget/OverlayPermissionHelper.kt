@@ -1,146 +1,135 @@
 package com.mirchevsky.lifearchitect2.widget
 
+import android.content.ComponentName
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Layers
-import androidx.compose.material3.*
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
+import androidx.core.content.ContextCompat
+
+private const val PREFS_WIDGET_PERMISSION_RESUME = "widget_permission_resume"
+private const val KEY_PENDING_KIND = "pending_kind"
+private const val KEY_PENDING_INTENT_URI = "pending_intent_uri"
+
+private const val KIND_SERVICE = "service"
+private const val KIND_BROADCAST = "broadcast"
 
 /**
- * OverlayPermissionDialogActivity
- * ─────────────────────────────────────────────────────────────────────────────
- * A transparent, zero-chrome trampoline Activity that explains the
- * "Display over other apps" permission and sends the user to Settings.
- *
- * Key change from the original: [onResume] now checks if the user has just
- * returned from the Settings screen with the permission granted. If so, it
- * broadcasts [WidgetOverlayService.ACTION_PERMISSION_GRANTED] before finishing,
- * which causes the service to immediately re-execute the pending widget action
- * (e.g. open the Add Task panel) without requiring a second tap.
+ * A durable, SharedPreferences-backed store for a single pending widget action.
+ * This allows the app to reliably resume a user's action after they grant a
+ * required permission, even if the app process is killed while in Settings.
+ */
+object PendingWidgetActionStore {
+
+    private fun prefs(context: Context) =
+        context.getSharedPreferences(PREFS_WIDGET_PERMISSION_RESUME, Context.MODE_PRIVATE)
+
+    fun saveServiceIntent(context: Context, intent: Intent) {
+        val explicitIntent = Intent(intent).apply {
+            component = ComponentName(context, WidgetOverlayService::class.java)
+            `package` = context.packageName
+        }
+
+        prefs(context).edit()
+            .putString(KEY_PENDING_KIND, KIND_SERVICE)
+            .putString(KEY_PENDING_INTENT_URI, explicitIntent.toUri(Intent.URI_INTENT_SCHEME))
+            .apply()
+    }
+
+    fun saveBroadcastIntent(context: Context, intent: Intent) {
+        val explicitIntent = Intent(intent).apply {
+            component = ComponentName(context, TaskWidgetProvider::class.java)
+            `package` = context.packageName
+        }
+
+        prefs(context).edit()
+            .putString(KEY_PENDING_KIND, KIND_BROADCAST)
+            .putString(KEY_PENDING_INTENT_URI, explicitIntent.toUri(Intent.URI_INTENT_SCHEME))
+            .apply()
+    }
+
+    fun hasPendingAction(context: Context): Boolean {
+        return prefs(context).contains(KEY_PENDING_KIND) &&
+                prefs(context).contains(KEY_PENDING_INTENT_URI)
+    }
+
+    fun clear(context: Context) {
+        prefs(context).edit().clear().apply()
+    }
+
+    fun dispatchAndClear(context: Context): Boolean {
+        val sharedPrefs = prefs(context)
+        val kind = sharedPrefs.getString(KEY_PENDING_KIND, null) ?: return false
+        val intentUri = sharedPrefs.getString(KEY_PENDING_INTENT_URI, null) ?: return false
+
+        val restoredIntent = try {
+            Intent.parseUri(intentUri, Intent.URI_INTENT_SCHEME).apply {
+                `package` = context.packageName
+            }
+        } catch (t: Throwable) {
+            clear(context)
+            return false
+        }
+
+        clear(context)
+
+        return try {
+            when (kind) {
+                KIND_SERVICE -> {
+                    ContextCompat.startForegroundService(context, restoredIntent)
+                    true
+                }
+                KIND_BROADCAST -> {
+                    context.sendBroadcast(restoredIntent)
+                    true
+                }
+                else -> false
+            }
+        } catch (t: Throwable) {
+            false
+        }
+    }
+}
+
+/**
+ * A transparent activity that gates overlay permission. It immediately opens the
+ * system settings screen. When the user returns, onResume() checks if the
+ * permission was granted and, if so, dispatches the pending action.
  */
 class OverlayPermissionDialogActivity : ComponentActivity() {
 
-    private var showDialog by mutableStateOf(true)
+    private var openedSettings = false
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
+    override fun onStart() {
+        super.onStart()
 
-        // If already granted (e.g. re-launched after coming back from Settings),
-        // signal the service and finish immediately.
         if (Settings.canDrawOverlays(this)) {
-            sendBroadcast(Intent(WidgetOverlayService.ACTION_PERMISSION_GRANTED))
+            if (PendingWidgetActionStore.hasPendingAction(this)) {
+                PendingWidgetActionStore.dispatchAndClear(this)
+            }
             finish()
             return
         }
 
-        setContent {
-            MaterialTheme {
-                if (showDialog) {
-                    Dialog(onDismissRequest = { finish() }) {
-                        Surface(
-                            shape = RoundedCornerShape(20.dp),
-                            color = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 6.dp
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(24.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Layers,
-                                    contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.primary,
-                                    modifier = Modifier.size(48.dp)
-                                )
-                                Spacer(Modifier.height(16.dp))
-                                Text(
-                                    text = "One quick step",
-                                    fontSize = 20.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Spacer(Modifier.height(10.dp))
-                                Text(
-                                    text = "To add tasks directly from your home screen, " +
-                                            "Life Architect needs permission to show a small " +
-                                            "panel over other apps.\n\n" +
-                                            "Tap \"Take me there\" — you\'ll see a single toggle " +
-                                            "labelled \"Allow display over other apps\". " +
-                                            "Switch it on, then come back.",
-                                    fontSize = 14.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    lineHeight = 20.sp
-                                )
-                                Spacer(Modifier.height(24.dp))
-                                Button(
-                                    onClick = {
-                                        showDialog = false
-                                        startActivity(
-                                            Intent(
-                                                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                                                Uri.parse("package:$packageName")
-                                            ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                                        )
-                                        // Do NOT finish here — onResume will detect the grant
-                                        // and broadcast ACTION_PERMISSION_GRANTED.
-                                    },
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = MaterialTheme.colorScheme.primary
-                                    )
-                                ) {
-                                    Text(
-                                        text = "Take me there",
-                                        fontWeight = FontWeight.SemiBold,
-                                        fontSize = 15.sp
-                                    )
-                                }
-                                Spacer(Modifier.height(8.dp))
-                                TextButton(
-                                    onClick = { finish() },
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        text = "Not now",
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        fontSize = 14.sp
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        if (!openedSettings) {
+            openedSettings = true
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:$packageName")
+            )
+            startActivity(intent)
         }
     }
 
-    /**
-     * Called when the user returns from the system Settings screen.
-     * If the overlay permission has been granted, broadcast the signal so the
-     * service can resume the pending widget action immediately.
-     */
     override fun onResume() {
         super.onResume()
-        if (Settings.canDrawOverlays(this)) {
-            sendBroadcast(Intent(WidgetOverlayService.ACTION_PERMISSION_GRANTED))
+
+        if (openedSettings) {
+            if (Settings.canDrawOverlays(this)) {
+                PendingWidgetActionStore.dispatchAndClear(this)
+            }
             finish()
         }
     }

@@ -20,28 +20,6 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
-/**
- * TaskWidgetProvider
- * ─────────────────────────────────────────────────────────────────────────────
- * Handles all widget UI updates and interactions. This includes rendering the
- * task list and handling taps on individual task rows (complete, flag, pin)
- * and the main widget buttons (add task, mic, add event).
- *
- * ## Permission-resume flow
- * When a widget interaction requires a permission that has not been granted,
- * the provider stores the original user intent in the static
- * [pendingIntentToExecute] field, then launches the appropriate system
- * permission screen. The permission activities ([OverlayPermissionDialogActivity],
- * [MicPermissionActivity], [CalendarPermissionActivity]) broadcast
- * [WidgetOverlayService.ACTION_PERMISSION_GRANTED] upon success. The provider's
- * onReceive catches this, retrieves the pending intent, and re-broadcasts it
- * to itself. This re-enters the onReceive flow, but this time the permission
- * check passes and the original action executes immediately, creating a
-_seamless flow without requiring a second tap from the user._
- *
- * Place at:
- *   app/src/main/java/com/mirchevsky/lifearchitect2/widget/TaskWidgetProvider.kt
- */
 class TaskWidgetProvider : AppWidgetProvider() {
 
     companion object {
@@ -59,17 +37,6 @@ class TaskWidgetProvider : AppWidgetProvider() {
 
         private val COLOR_URGENT = Color.parseColor("#F87171") // Dark mode soft red
         private val COLOR_PINNED = Color.parseColor("#FBBF24") // Dark mode amber
-
-        /**
-         * Stores the original user intent when a permission is required. After the
-         * user grants the permission, the ACTION_PERMISSION_GRANTED handler
-         * re-broadcasts this intent to resume the original action seamlessly.
-         * This must be static as the AppWidgetProvider instance is not persistent.
-         */
-        private var pendingIntentToExecute: Intent? = null
-
-        fun hasOverlayPermission(context: Context): Boolean =
-            Settings.canDrawOverlays(context)
 
         fun sendRefreshBroadcast(context: Context) {
             val intent = Intent(ACTION_WIDGET_REFRESH)
@@ -99,16 +66,6 @@ class TaskWidgetProvider : AppWidgetProvider() {
         super.onReceive(context, intent)
 
         when (intent.action) {
-            // After any permission is granted, this action is broadcast.
-            // We retrieve the original intent and re-broadcast it to ourself.
-            WidgetOverlayService.ACTION_PERMISSION_GRANTED -> {
-                Log.d(TAG, "Permission granted, re-broadcasting pending widget action.")
-                pendingIntentToExecute?.let {
-                    context.sendBroadcast(it)
-                }
-                pendingIntentToExecute = null
-            }
-
             ACTION_WIDGET_REFRESH -> {
                 val manager = AppWidgetManager.getInstance(context)
                 val ids = manager.getAppWidgetIds(
@@ -118,10 +75,8 @@ class TaskWidgetProvider : AppWidgetProvider() {
             }
 
             ACTION_WIDGET_ROW_ACTION -> {
-                // Row actions (complete, flag, pin) require overlay permission for the XP toast.
-                if (!hasOverlayPermission(context)) {
-                    Log.d(TAG, "Overlay permission needed for row action, deferring.")
-                    pendingIntentToExecute = intent
+                if (!Settings.canDrawOverlays(context)) {
+                    PendingWidgetActionStore.saveBroadcastIntent(context, intent)
                     val permissionIntent = Intent(context, OverlayPermissionDialogActivity::class.java)
                         .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                     context.startActivity(permissionIntent)
@@ -165,14 +120,12 @@ class TaskWidgetProvider : AppWidgetProvider() {
                             }
                         }
 
-                        // Refresh the widget UI immediately.
                         val manager = AppWidgetManager.getInstance(context)
                         val ids = manager.getAppWidgetIds(
                             ComponentName(context, TaskWidgetProvider::class.java)
                         )
                         ids.forEach { id -> pushWidget(context, manager, id) }
 
-                        // If XP was gained, launch the overlay service to show the toast.
                         if (xpGained > 0) {
                             context.startService(
                                 Intent(context, WidgetOverlayService::class.java).apply {
@@ -222,7 +175,6 @@ class TaskWidgetProvider : AppWidgetProvider() {
         rv.setRemoteAdapter(R.id.widget_task_list, items)
         rv.setEmptyView(R.id.widget_task_list, R.id.widget_empty_text)
 
-        // Template for row actions (complete, flag, pin)
         val rowActionTemplate = PendingIntent.getBroadcast(
             context,
             appWidgetId,
@@ -232,7 +184,6 @@ class TaskWidgetProvider : AppWidgetProvider() {
         )
         rv.setPendingIntentTemplate(R.id.widget_task_list, rowActionTemplate)
 
-        // Intents for the main widget buttons (mic, event, add)
         rv.setOnClickPendingIntent(
             R.id.widget_btn_mic,
             getServiceIntent(context, WidgetOverlayService.ACTION_MIC, appWidgetId, 10)
@@ -247,7 +198,6 @@ class TaskWidgetProvider : AppWidgetProvider() {
         )
 
         appWidgetManager.updateAppWidget(appWidgetId, rv)
-
     }
 
     private fun buildCollectionItems(
@@ -342,14 +292,6 @@ class TaskWidgetProvider : AppWidgetProvider() {
         return rv
     }
 
-    /**
-     * Creates a PendingIntent to launch the WidgetOverlayService. This is used
-     * for the main widget buttons (add, mic, event).
-     *
-     * Note: The service itself is responsible for handling mic/calendar permissions.
-     * This provider only needs to ensure the overlay permission is handled for the
-     * initial tap, which is done inside the service's onStartCommand.
-     */
     private fun getServiceIntent(
         context: Context,
         action: String,
