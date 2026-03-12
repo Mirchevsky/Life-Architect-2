@@ -32,6 +32,14 @@
     android:background="@drawable/widget_background">
 
     <!-- ── Header row ──────────────────────────────────────────────────── -->
+    <!--
+        Two-column header:
+          Left  : "Tasks" title, vertically centred
+          Right : vertical stack — empty spacer on top (aligns with title),
+                  then the three action buttons on the bottom row so that
+                  [calendar] sits on the same horizontal centre-line as the
+                  flag icon in each task row, and [+] on the same line as pin.
+    -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -53,48 +61,51 @@
             android:textStyle="bold" />
 
         <!--
-            Mic button (order 1) — teal rounded square, white icon.
-            Matches app's FilledIconButton with BrandGreen (#10B981) background.
+            Button group — pushed to the bottom of the header so the buttons
+            sit flush with the top task row's icon band.
         -->
-        <ImageButton
-            android:id="@+id/widget_btn_mic"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:background="@drawable/widget_btn_bg_teal"
-            android:src="@drawable/widget_ic_mic"
-            android:contentDescription="Voice input"
-            android:scaleType="centerInside"
-            android:padding="7dp" />
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-        <!--
-            Calendar button (order 2) — purple rounded square, white icon.
-            Matches app's FilledIconButton with Purple (#7C3AED) background.
-        -->
-        <ImageButton
-            android:id="@+id/widget_btn_add_event"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:background="@drawable/widget_btn_bg_purple"
-            android:src="@drawable/widget_ic_calendar"
-            android:contentDescription="Add calendar event"
-            android:scaleType="centerInside"
-            android:padding="7dp"
-            android:layout_marginStart="5dp" />
+            <!-- Mic button -->
+            <ImageButton
+                android:id="@+id/widget_btn_mic"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:background="@drawable/widget_btn_bg_teal"
+                android:src="@drawable/widget_ic_mic"
+                android:contentDescription="Voice input"
+                android:scaleType="centerInside"
+                android:padding="7dp" />
 
-        <!--
-            Add Task button (order 3) — green rounded square, white icon.
-            Matches app's FilledIconButton with BrandGreen (#10B981) background.
-        -->
-        <ImageButton
-            android:id="@+id/widget_btn_add_task"
-            android:layout_width="34dp"
-            android:layout_height="34dp"
-            android:background="@drawable/widget_btn_bg_green"
-            android:src="@drawable/widget_ic_add"
-            android:contentDescription="Add task"
-            android:scaleType="centerInside"
-            android:padding="7dp"
-            android:layout_marginStart="5dp" />
+            <!-- Calendar button — centre-aligns with flag icon in task rows -->
+            <ImageButton
+                android:id="@+id/widget_btn_add_event"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:background="@drawable/widget_btn_bg_purple"
+                android:src="@drawable/widget_ic_calendar"
+                android:contentDescription="Add calendar event"
+                android:scaleType="centerInside"
+                android:padding="7dp"
+                android:layout_marginStart="5dp" />
+
+            <!-- Add Task button — centre-aligns with pin icon in task rows -->
+            <ImageButton
+                android:id="@+id/widget_btn_add_task"
+                android:layout_width="34dp"
+                android:layout_height="34dp"
+                android:background="@drawable/widget_btn_bg_green"
+                android:src="@drawable/widget_ic_add"
+                android:contentDescription="Add task"
+                android:scaleType="centerInside"
+                android:padding="7dp"
+                android:layout_marginStart="5dp" />
+
+        </LinearLayout>
 
     </LinearLayout>
 

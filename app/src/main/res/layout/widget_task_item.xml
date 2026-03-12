@@ -23,8 +23,6 @@
     android:orientation="horizontal"
     android:gravity="center_vertical"
     android:background="@drawable/widget_item_bg"
-    android:paddingStart="12dp"
-    android:paddingEnd="12dp"
     android:paddingTop="10dp"
     android:paddingBottom="10dp"
     android:layout_marginBottom="6dp"
@@ -35,6 +33,7 @@
         android:id="@+id/widget_item_dot"
         android:layout_width="20dp"
         android:layout_height="20dp"
+        android:layout_marginStart="16dp"
         android:layout_marginEnd="12dp"
         android:src="@drawable/widget_checkbox_unchecked"
         android:contentDescription="Complete task" />
@@ -90,9 +89,9 @@
     <!-- Flag icon — always visible -->
     <ImageView
         android:id="@+id/widget_item_flag"
-        android:layout_width="16dp"
-        android:layout_height="16dp"
-        android:layout_marginStart="6dp"
+        android:layout_width="26dp"
+        android:layout_height="26dp"
+        android:layout_marginStart="-5dp"
         android:src="@drawable/widget_ic_flag"
         android:contentDescription="Toggle urgent"
         android:visibility="visible" />
@@ -100,9 +99,10 @@
     <!-- Pin icon — always visible -->
     <ImageView
         android:id="@+id/widget_item_pin"
-        android:layout_width="16dp"
-        android:layout_height="16dp"
-        android:layout_marginStart="4dp"
+        android:layout_width="26dp"
+        android:layout_height="26dp"
+        android:layout_marginStart="10dp"
+        android:layout_marginEnd="10dp"
         android:src="@drawable/widget_ic_pin"
         android:contentDescription="Toggle pin"
         android:visibility="visible" />
