@@ -38,6 +38,7 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -88,12 +89,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -202,7 +203,8 @@ class WidgetOverlayService : Service() {
             ACTION_ADD_TASK -> showOverlay(OverlayMode.ADD_TASK, widgetId)
 
             ACTION_MIC -> {
-                if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
+                if (
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) !=
                     PackageManager.PERMISSION_GRANTED
                 ) {
                     PendingWidgetActionStore.saveServiceIntent(this, intent)
@@ -265,11 +267,7 @@ class WidgetOverlayService : Service() {
             .build()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            startForeground(
-                NOTIF_ID,
-                notification,
-                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
-            )
+            startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE)
         } else {
             startForeground(NOTIF_ID, notification)
         }
@@ -278,34 +276,34 @@ class WidgetOverlayService : Service() {
     private fun showOverlay(mode: OverlayMode, widgetId: Int) {
         if (overlayView != null) return
 
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.BOTTOM
-        }
+        val params =
+            WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                PixelFormat.TRANSLUCENT
+            ).apply { gravity = Gravity.BOTTOM }
 
-        overlayView = ComposeView(this).apply {
-            setViewTreeLifecycleOwner(lifecycleOwner)
-            setViewTreeSavedStateRegistryOwner(lifecycleOwner)
-            setContent {
-                AppTheme {
-                    OverlayPanel(
-                        mode = mode,
-                        onDismiss = { removeOverlay() },
-                        onSaved = {
-                            overlayView?.let { view -> windowManager.removeView(view) }
-                            overlayView = null
-                            TaskWidgetProvider.sendRefreshBroadcast(applicationContext)
-                            showFeedbackOverlay(it)
-                        }
-                    )
+        overlayView =
+            ComposeView(this).apply {
+                setViewTreeLifecycleOwner(lifecycleOwner)
+                setViewTreeSavedStateRegistryOwner(lifecycleOwner)
+                setContent {
+                    AppTheme {
+                        OverlayPanel(
+                            mode = mode,
+                            onDismiss = { removeOverlay() },
+                            onSaved = {
+                                overlayView?.let { view -> windowManager.removeView(view) }
+                                overlayView = null
+                                TaskWidgetProvider.sendRefreshBroadcast(applicationContext)
+                                showFeedbackOverlay(it)
+                            }
+                        )
+                    }
                 }
             }
-        }
         windowManager.addView(overlayView, params)
     }
 
@@ -321,22 +319,22 @@ class WidgetOverlayService : Service() {
             return
         }
 
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.MATCH_PARENT,
-            WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.BOTTOM
-        }
+        val params =
+            WindowManager.LayoutParams(
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.MATCH_PARENT,
+                WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                PixelFormat.TRANSLUCENT
+            ).apply { gravity = Gravity.BOTTOM }
 
-        feedbackView = ComposeView(this).apply {
-            setViewTreeLifecycleOwner(lifecycleOwner)
-            setViewTreeSavedStateRegistryOwner(lifecycleOwner)
-            setContent { AppTheme { FeedbackToast(message) } }
-        }
+        feedbackView =
+            ComposeView(this).apply {
+                setViewTreeLifecycleOwner(lifecycleOwner)
+                setViewTreeSavedStateRegistryOwner(lifecycleOwner)
+                setContent { AppTheme { FeedbackToast(message) } }
+            }
         windowManager.addView(feedbackView, params)
 
         serviceScope.launch {
@@ -363,48 +361,107 @@ class WidgetOverlayService : Service() {
 
     private fun createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-            val channel = NotificationChannel(
-                CHANNEL_ID,
-                "Widget Overlays",
-                NotificationManager.IMPORTANCE_LOW
-            )
+            val channel =
+                NotificationChannel(
+                    CHANNEL_ID,
+                    "Widget Overlays",
+                    NotificationManager.IMPORTANCE_LOW
+                )
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
     }
 
     @Composable
-    private fun greenTextFieldColors() = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = Color(0xFF10B981),
-        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-        focusedLabelColor = Color(0xFF10B981),
-        cursorColor = Color(0xFF10B981)
-    )
+    private fun greenTextFieldColors() =
+        OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Color(0xFF10B981),
+            unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+            focusedLabelColor = Color(0xFF10B981),
+            cursorColor = Color(0xFF10B981),
+            focusedContainerColor = overlayInputColor(),
+            unfocusedContainerColor = overlayInputColor(),
+            disabledContainerColor = overlayInputColor()
+        )
 
     @Composable
-    private fun purpleTextFieldColors() = OutlinedTextFieldDefaults.colors(
-        focusedBorderColor = Color(0xFF7C3AED),
-        unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
-        focusedLabelColor = Color(0xFF7C3AED),
-        cursorColor = Color(0xFF7C3AED)
-    )
+    private fun purpleTextFieldColors() =
+        OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = Color(0xFF7C3AED),
+            unfocusedBorderColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.3f),
+            focusedLabelColor = Color(0xFF7C3AED),
+            cursorColor = Color(0xFF7C3AED),
+            focusedContainerColor = overlayInputColor(),
+            unfocusedContainerColor = overlayInputColor(),
+            disabledContainerColor = overlayInputColor()
+        )
+
+    @Composable
+    private fun overlaySheetColor(): Color {
+        return if (isSystemInDarkTheme()) {
+            MaterialTheme.colorScheme.surface
+        } else {
+            colorResource(id = R.color.widget_background)
+        }
+    }
+
+    @Composable
+    private fun overlayInputColor(): Color {
+        return if (isSystemInDarkTheme()) {
+            Color.Transparent
+        } else {
+            colorResource(id = R.color.widget_item_card)
+        }
+    }
+
+    @Composable
+    private fun overlayInnerContentColor(): Color {
+        return if (isSystemInDarkTheme()) {
+            Color.Transparent
+        } else {
+            colorResource(id = R.color.widget_item_card)
+        }
+    }
+
+    @Composable
+    private fun datePickerContainerColor(): Color {
+        return if (isSystemInDarkTheme()) {
+            MaterialTheme.colorScheme.surface
+        } else {
+            colorResource(id = R.color.widget_item_card)
+        }
+    }
+
+    @Composable
+    private fun secondaryBackButtonColor(): Color {
+        return if (isSystemInDarkTheme()) {
+            Color.White
+        } else {
+            colorResource(id = R.color.widget_item_card)
+        }
+    }
+
+    @Composable
+    private fun minuteFieldContainerColor(): Color {
+        return if (isSystemInDarkTheme()) {
+            MaterialTheme.colorScheme.surfaceVariant
+        } else {
+            colorResource(id = R.color.widget_background)
+        }
+    }
 
     @Composable
     private fun PanelSurface(content: @Composable ColumnScope.() -> Unit) {
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp),
-            color = MaterialTheme.colorScheme.surface,
+            color = overlaySheetColor(),
             contentColor = MaterialTheme.colorScheme.onSurface,
             tonalElevation = 6.dp,
             shadowElevation = 16.dp
         ) {
             Column(
-                modifier = Modifier.padding(
-                    start = 20.dp,
-                    end = 20.dp,
-                    bottom = 32.dp,
-                    top = 8.dp
-                ),
+                modifier =
+                    Modifier.padding(start = 20.dp, end = 20.dp, bottom = 32.dp, top = 8.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
                 content = content
             )
@@ -414,23 +471,16 @@ class WidgetOverlayService : Service() {
     @Composable
     private fun DragHandle() {
         Box(
-            modifier = Modifier
-                .padding(vertical = 8.dp)
-                .width(40.dp)
-                .height(4.dp)
-                .background(
-                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
-                    CircleShape
-                )
+            modifier =
+                Modifier.padding(vertical = 8.dp)
+                    .width(40.dp)
+                    .height(4.dp)
+                    .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f), CircleShape)
         )
     }
 
     @Composable
-    private fun OverlayPanel(
-        mode: OverlayMode,
-        onDismiss: () -> Unit,
-        onSaved: (String) -> Unit
-    ) {
+    private fun OverlayPanel(mode: OverlayMode, onDismiss: () -> Unit, onSaved: (String) -> Unit) {
         var visible by remember { mutableStateOf(false) }
         LaunchedEffect(Unit) { visible = true }
         val dismissInteraction = remember { MutableInteractionSource() }
@@ -438,35 +488,33 @@ class WidgetOverlayService : Service() {
 
         AnimatedVisibility(
             visible = visible,
-            enter = slideInVertically(
-                initialOffsetY = { it },
-                animationSpec = tween(300, easing = FastOutSlowInEasing)
-            ),
-            exit = slideOutVertically(
-                targetOffsetY = { it },
-                animationSpec = tween(260)
-            )
+            enter =
+                slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = tween(300, easing = FastOutSlowInEasing)
+                ),
+            exit = slideOutVertically(targetOffsetY = { it }, animationSpec = tween(260))
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(Color.Black.copy(alpha = 0.30f))
-                        .clickable(
-                            interactionSource = dismissInteraction,
-                            indication = null,
-                            onClick = onDismiss
-                        )
+                    modifier =
+                        Modifier.fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.30f))
+                            .clickable(
+                                interactionSource = dismissInteraction,
+                                indication = null,
+                                onClick = onDismiss
+                            )
                 )
                 Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .clickable(
-                            interactionSource = consumeInteraction,
-                            indication = null,
-                            onClick = {}
-                        )
+                    modifier =
+                        Modifier.align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .clickable(
+                                interactionSource = consumeInteraction,
+                                indication = null,
+                                onClick = {}
+                            )
                 ) {
                     when (mode) {
                         OverlayMode.ADD_TASK -> AddTaskPanel(onDismiss, onSaved)
@@ -480,20 +528,9 @@ class WidgetOverlayService : Service() {
 
     @Composable
     private fun PanelTopBar(onDismiss: () -> Unit) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(40.dp)
-        ) {
-            Box(modifier = Modifier.align(Alignment.TopCenter)) {
-                DragHandle()
-            }
-            IconButton(
-                onClick = onDismiss,
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .size(32.dp)
-            ) {
+        Box(modifier = Modifier.fillMaxWidth().height(40.dp)) {
+            Box(modifier = Modifier.align(Alignment.TopCenter)) { DragHandle() }
+            IconButton(onClick = onDismiss, modifier = Modifier.align(Alignment.CenterEnd).size(32.dp)) {
                 Icon(
                     Icons.Default.Close,
                     contentDescription = "Close",
@@ -513,14 +550,16 @@ class WidgetOverlayService : Service() {
             if (title.isBlank()) return
             isSaving = true
             serviceScope.launch(Dispatchers.IO) {
-                AppDatabase.getDatabase(applicationContext).taskDao().upsertTask(
-                    TaskEntity(
-                        id = UUID.randomUUID().toString(),
-                        userId = "local_user",
-                        title = title.trim(),
-                        difficulty = "medium"
+                AppDatabase.getDatabase(applicationContext)
+                    .taskDao()
+                    .upsertTask(
+                        TaskEntity(
+                            id = UUID.randomUUID().toString(),
+                            userId = "local_user",
+                            title = title.trim(),
+                            difficulty = "medium"
+                        )
                     )
-                )
                 launch(Dispatchers.Main) {
                     keyboard?.hide()
                     onSaved("")
@@ -536,10 +575,11 @@ class WidgetOverlayService : Service() {
                 onValueChange = { title = it },
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
-                    imeAction = ImeAction.Done
-                ),
+                keyboardOptions =
+                    KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        imeAction = ImeAction.Done
+                    ),
                 keyboardActions = KeyboardActions(onDone = { save() }),
                 colors = greenTextFieldColors()
             )
@@ -547,17 +587,11 @@ class WidgetOverlayService : Service() {
             Button(
                 onClick = { save() },
                 enabled = title.isNotBlank() && !isSaving,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
+                modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
             ) {
-                Text(
-                    if (isSaving) "Saving…" else "Save Task",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
-                )
+                Text(if (isSaving) "Saving…" else "Save Task", fontWeight = FontWeight.Bold, fontSize = 15.sp)
             }
         }
     }
@@ -573,52 +607,55 @@ class WidgetOverlayService : Service() {
         DisposableEffect(Unit) {
             val recognizer = SpeechRecognizer.createSpeechRecognizer(applicationContext)
             recognizerRef = recognizer
-            val recognizerIntent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(
-                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-                )
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            }
-            recognizer.setRecognitionListener(object : RecognitionListener {
-                override fun onReadyForSpeech(params: Bundle?) {
-                    isListening = true
+            val recognizerIntent =
+                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(
+                        RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                        RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                    )
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 }
+            recognizer.setRecognitionListener(
+                object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {
+                        isListening = true
+                    }
 
-                override fun onBeginningOfSpeech() {
-                    isListening = true
+                    override fun onBeginningOfSpeech() {
+                        isListening = true
+                    }
+
+                    override fun onRmsChanged(rmsdB: Float) {}
+
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+
+                    override fun onEndOfSpeech() {
+                        isListening = false
+                    }
+
+                    override fun onError(error: Int) {
+                        isListening = false
+                    }
+
+                    override fun onResults(results: Bundle?) {
+                        results
+                            ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                            ?.firstOrNull()
+                            ?.let { title = it }
+                        isListening = false
+                    }
+
+                    override fun onPartialResults(partialResults: Bundle?) {
+                        partialResults
+                            ?.getStringArrayList(RecognizerIntent.EXTRA_PARTIAL_RESULTS)
+                            ?.firstOrNull()
+                            ?.let { title = it }
+                    }
+
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
                 }
-
-                override fun onRmsChanged(rmsdB: Float) {}
-
-                override fun onBufferReceived(buffer: ByteArray?) {}
-
-                override fun onEndOfSpeech() {
-                    isListening = false
-                }
-
-                override fun onError(error: Int) {
-                    isListening = false
-                }
-
-                override fun onResults(results: Bundle?) {
-                    results
-                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-                        ?.firstOrNull()
-                        ?.let { title = it }
-                    isListening = false
-                }
-
-                override fun onPartialResults(partialResults: Bundle?) {
-                    partialResults
-                        ?.getStringArrayList(RecognizerIntent.EXTRA_PARTIAL_RESULTS)
-                        ?.firstOrNull()
-                        ?.let { title = it }
-                }
-
-                override fun onEvent(eventType: Int, params: Bundle?) {}
-            })
+            )
             recognizer.startListening(recognizerIntent)
             onDispose { recognizer.destroy() }
         }
@@ -627,14 +664,16 @@ class WidgetOverlayService : Service() {
             if (title.isBlank()) return
             isSaving = true
             serviceScope.launch(Dispatchers.IO) {
-                AppDatabase.getDatabase(applicationContext).taskDao().upsertTask(
-                    TaskEntity(
-                        id = UUID.randomUUID().toString(),
-                        userId = "local_user",
-                        title = title.trim(),
-                        difficulty = "medium"
+                AppDatabase.getDatabase(applicationContext)
+                    .taskDao()
+                    .upsertTask(
+                        TaskEntity(
+                            id = UUID.randomUUID().toString(),
+                            userId = "local_user",
+                            title = title.trim(),
+                            difficulty = "medium"
+                        )
                     )
-                )
                 launch(Dispatchers.Main) {
                     keyboard?.hide()
                     onSaved("")
@@ -644,33 +683,26 @@ class WidgetOverlayService : Service() {
 
         fun startListening() {
             isListening = true
-            val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
-                putExtra(
-                    RecognizerIntent.EXTRA_LANGUAGE_MODEL,
-                    RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
-                )
-                putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
-                putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
-            }
+            val intent =
+                Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(
+                        RecognizerIntent.EXTRA_LANGUAGE_MODEL,
+                        RecognizerIntent.LANGUAGE_MODEL_FREE_FORM
+                    )
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
+                }
             recognizerRef?.startListening(intent)
         }
 
         PanelSurface {
             PanelTopBar(onDismiss)
             Spacer(Modifier.height(4.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(80.dp),
-                contentAlignment = Alignment.Center
-            ) {
+            Box(modifier = Modifier.fillMaxWidth().height(80.dp), contentAlignment = Alignment.Center) {
                 if (isListening) {
                     PulsingMicIndicator()
                 } else {
-                    IconButton(
-                        onClick = { startListening() },
-                        modifier = Modifier.size(64.dp)
-                    ) {
+                    IconButton(onClick = { startListening() }, modifier = Modifier.size(64.dp)) {
                         Icon(
                             Icons.Default.Mic,
                             contentDescription = "Start Listening",
@@ -686,27 +718,22 @@ class WidgetOverlayService : Service() {
                 onValueChange = { title = it },
                 modifier = Modifier.fillMaxWidth(),
                 colors = greenTextFieldColors(),
-                keyboardOptions = KeyboardOptions(
-                    capitalization = KeyboardCapitalization.Sentences,
-                    imeAction = ImeAction.Done
-                ),
+                keyboardOptions =
+                    KeyboardOptions(
+                        capitalization = KeyboardCapitalization.Sentences,
+                        imeAction = ImeAction.Done
+                    ),
                 keyboardActions = KeyboardActions(onDone = { save() })
             )
             Spacer(Modifier.height(16.dp))
             Button(
                 onClick = { save() },
                 enabled = title.isNotBlank() && !isSaving,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(50.dp),
+                modifier = Modifier.fillMaxWidth().height(50.dp),
                 shape = RoundedCornerShape(14.dp),
                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF10B981))
             ) {
-                Text(
-                    if (isSaving) "Saving…" else "Save Task",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp
-                )
+                Text(if (isSaving) "Saving…" else "Save Task", fontWeight = FontWeight.Bold, fontSize = 15.sp)
             }
         }
     }
@@ -717,30 +744,30 @@ class WidgetOverlayService : Service() {
         val circleCount = 3
         val circleDelay = 300
 
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.Center
-        ) {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
             repeat(circleCount) {
-                val alpha by infiniteTransition.animateFloat(
+                val alpha by
+                infiniteTransition.animateFloat(
                     initialValue = 0.2f,
                     targetValue = 1f,
-                    animationSpec = infiniteRepeatable(
-                        animation = tween(
-                            durationMillis = circleDelay * circleCount,
-                            easing = LinearEasing
+                    animationSpec =
+                        infiniteRepeatable(
+                            animation =
+                                tween(
+                                    durationMillis = circleDelay * circleCount,
+                                    easing = LinearEasing
+                                ),
+                            repeatMode = RepeatMode.Reverse,
+                            initialStartOffset = StartOffset(circleDelay * it)
                         ),
-                        repeatMode = RepeatMode.Reverse,
-                        initialStartOffset = StartOffset(circleDelay * it)
-                    ),
                     label = ""
                 )
                 Box(
-                    modifier = Modifier
-                        .padding(horizontal = 4.dp)
-                        .size(12.dp)
-                        .alpha(alpha)
-                        .background(Color(0xFF10B981), CircleShape)
+                    modifier =
+                        Modifier.padding(horizontal = 4.dp)
+                            .size(12.dp)
+                            .alpha(alpha)
+                            .background(Color(0xFF10B981), CircleShape)
                 )
             }
         }
@@ -748,10 +775,8 @@ class WidgetOverlayService : Service() {
 
     @Composable
     private fun TimeInputCustom(state: EventState) {
-        val customTextSelectionColors = TextSelectionColors(
-            handleColor = Color.White,
-            backgroundColor = Color.White.copy(alpha = 0.4f)
-        )
+        val customTextSelectionColors =
+            TextSelectionColors(handleColor = Color.White, backgroundColor = Color.White.copy(alpha = 0.4f))
 
         CompositionLocalProvider(LocalTextSelectionColors provides customTextSelectionColors) {
             Row(
@@ -764,16 +789,12 @@ class WidgetOverlayService : Service() {
                     onValueChange = { value ->
                         state.hour = value.filter { it.isDigit() }.take(2).toIntOrNull() ?: 0
                     },
-                    textStyle = TextStyle(
-                        color = Color.White,
-                        fontSize = 48.sp,
-                        textAlign = TextAlign.Center
-                    ),
-                    modifier = Modifier
-                        .width(110.dp)
-                        .height(80.dp)
-                        .background(Color(0xFF7C3AED), RoundedCornerShape(12.dp))
-                        .padding(8.dp),
+                    textStyle = TextStyle(color = Color.White, fontSize = 48.sp, textAlign = TextAlign.Center),
+                    modifier =
+                        Modifier.width(110.dp)
+                            .height(80.dp)
+                            .background(Color(0xFF7C3AED), RoundedCornerShape(12.dp))
+                            .padding(8.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     cursorBrush = SolidColor(Color.White)
                 )
@@ -785,21 +806,19 @@ class WidgetOverlayService : Service() {
                     onValueChange = { value ->
                         state.minute = value.filter { it.isDigit() }.take(2).toIntOrNull() ?: 0
                     },
-                    textStyle = TextStyle(
-                        color = MaterialTheme.colorScheme.onSurface,
-                        fontSize = 48.sp,
-                        textAlign = TextAlign.Center
-                    ),
-                    modifier = Modifier
-                        .width(110.dp)
-                        .height(80.dp)
-                        .background(
-                            MaterialTheme.colorScheme.surfaceVariant,
-                            RoundedCornerShape(12.dp)
-                        )
-                        .padding(8.dp),
+                    textStyle =
+                        TextStyle(
+                            color = MaterialTheme.colorScheme.onSurface,
+                            fontSize = 48.sp,
+                            textAlign = TextAlign.Center
+                        ),
+                    modifier =
+                        Modifier.width(110.dp)
+                            .height(80.dp)
+                            .background(minuteFieldContainerColor(), RoundedCornerShape(12.dp))
+                            .padding(8.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    cursorBrush = SolidColor(Color.White)
+                    cursorBrush = SolidColor(MaterialTheme.colorScheme.onSurface)
                 )
             }
         }
@@ -811,18 +830,19 @@ class WidgetOverlayService : Service() {
         val eventState = remember { EventState() }
         var currentStep by remember { mutableStateOf(EventStep.TITLE) }
         val keyboard = LocalSoftwareKeyboardController.current
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = eventState.selectedDate
-                .atStartOfDay(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli()
-        )
+        val datePickerState =
+            rememberDatePickerState(
+                initialSelectedDateMillis =
+                    eventState.selectedDate
+                        .atStartOfDay(ZoneId.systemDefault())
+                        .toInstant()
+                        .toEpochMilli()
+            )
 
         LaunchedEffect(datePickerState.selectedDateMillis) {
             datePickerState.selectedDateMillis?.let { millis: Long ->
-                eventState.selectedDate = java.time.Instant.ofEpochMilli(millis)
-                    .atZone(ZoneId.systemDefault())
-                    .toLocalDate()
+                eventState.selectedDate =
+                    java.time.Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()).toLocalDate()
             }
         }
 
@@ -830,26 +850,29 @@ class WidgetOverlayService : Service() {
             if (eventState.title.isBlank()) return
             eventState.isSaving = true
             serviceScope.launch(Dispatchers.IO) {
-                val startMillis = if (eventState.isAllDay) {
-                    eventState.selectedDate.atStartOfDay(ZoneId.systemDefault())
-                        .toInstant()
-                        .toEpochMilli()
-                } else {
-                    eventState.selectedDate
-                        .atTime(eventState.hour, eventState.minute)
-                        .atZone(ZoneId.systemDefault())
-                        .toInstant()
-                        .toEpochMilli()
-                }
+                val startMillis =
+                    if (eventState.isAllDay) {
+                        eventState.selectedDate
+                            .atStartOfDay(ZoneId.systemDefault())
+                            .toInstant()
+                            .toEpochMilli()
+                    } else {
+                        eventState.selectedDate
+                            .atTime(eventState.hour, eventState.minute)
+                            .atZone(ZoneId.systemDefault())
+                            .toInstant()
+                            .toEpochMilli()
+                    }
 
-                val values = ContentValues().apply {
-                    put(CalendarContract.Events.DTSTART, startMillis)
-                    put(CalendarContract.Events.DTEND, startMillis + 3_600_000L)
-                    put(CalendarContract.Events.TITLE, eventState.title)
-                    put(CalendarContract.Events.CALENDAR_ID, 1)
-                    put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
-                    put(CalendarContract.Events.ALL_DAY, if (eventState.isAllDay) 1 else 0)
-                }
+                val values =
+                    ContentValues().apply {
+                        put(CalendarContract.Events.DTSTART, startMillis)
+                        put(CalendarContract.Events.DTEND, startMillis + 3_600_000L)
+                        put(CalendarContract.Events.TITLE, eventState.title)
+                        put(CalendarContract.Events.CALENDAR_ID, 1)
+                        put(CalendarContract.Events.EVENT_TIMEZONE, TimeZone.getDefault().id)
+                        put(CalendarContract.Events.ALL_DAY, if (eventState.isAllDay) 1 else 0)
+                    }
 
                 try {
                     contentResolver.insert(CalendarContract.Events.CONTENT_URI, values)
@@ -857,16 +880,18 @@ class WidgetOverlayService : Service() {
                     Log.e(TAG, "Failed to insert calendar event", e)
                 }
 
-                AppDatabase.getDatabase(applicationContext).taskDao().upsertTask(
-                    TaskEntity(
-                        id = UUID.randomUUID().toString(),
-                        userId = "local_user",
-                        title = eventState.title.trim(),
-                        difficulty = "medium",
-                        dueDate = startMillis,
-                        category = "Calendar"
+                AppDatabase.getDatabase(applicationContext)
+                    .taskDao()
+                    .upsertTask(
+                        TaskEntity(
+                            id = UUID.randomUUID().toString(),
+                            userId = "local_user",
+                            title = eventState.title.trim(),
+                            difficulty = "medium",
+                            dueDate = startMillis,
+                            category = "Calendar"
+                        )
                     )
-                )
 
                 withContext(Dispatchers.Main) {
                     keyboard?.hide()
@@ -886,48 +911,46 @@ class WidgetOverlayService : Service() {
                         modifier = Modifier.fillMaxWidth(),
                         colors = purpleTextFieldColors(),
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(
-                            capitalization = KeyboardCapitalization.Sentences,
-                            imeAction = ImeAction.Next
-                        ),
-                        keyboardActions = KeyboardActions(
-                            onNext = { currentStep = EventStep.DATE }
-                        )
+                        keyboardOptions =
+                            KeyboardOptions(
+                                capitalization = KeyboardCapitalization.Sentences,
+                                imeAction = ImeAction.Next
+                            ),
+                        keyboardActions = KeyboardActions(onNext = { currentStep = EventStep.DATE })
                     )
                     Spacer(Modifier.height(16.dp))
                     Button(
                         onClick = { currentStep = EventStep.DATE },
                         enabled = eventState.title.isNotBlank(),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(50.dp),
+                        modifier = Modifier.fillMaxWidth().height(50.dp),
                         shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF7C3AED)
-                        )
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
                     ) {
-                        Text(
-                            "Set Date & Time",
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 15.sp
-                        )
+                        Text("Set Date & Time", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                     }
                 }
 
                 EventStep.DATE -> {
-                    DatePicker(
-                        state = datePickerState,
-                        modifier = Modifier.padding(0.dp),
-                        title = null,
-                        headline = null,
-                        showModeToggle = false,
-                        colors = DatePickerDefaults.colors(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            selectedDayContainerColor = Color(0xFF7C3AED),
-                            todayDateBorderColor = MaterialTheme.colorScheme.onSurface,
-                            todayContentColor = MaterialTheme.colorScheme.onSurface
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        color = overlayInnerContentColor()
+                    ) {
+                        DatePicker(
+                            state = datePickerState,
+                            modifier = Modifier.padding(0.dp),
+                            title = null,
+                            headline = null,
+                            showModeToggle = false,
+                            colors =
+                                DatePickerDefaults.colors(
+                                    containerColor = datePickerContainerColor(),
+                                    selectedDayContainerColor = Color(0xFF7C3AED),
+                                    todayDateBorderColor = MaterialTheme.colorScheme.onSurface,
+                                    todayContentColor = MaterialTheme.colorScheme.onSurface
+                                )
                         )
-                    )
+                    }
                     Spacer(Modifier.height(8.dp))
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -935,14 +958,13 @@ class WidgetOverlayService : Service() {
                     ) {
                         Button(
                             onClick = { currentStep = EventStep.TITLE },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp),
+                            modifier = Modifier.weight(1f).height(50.dp),
                             shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.White,
-                                contentColor = Color(0xFF7C3AED)
-                            )
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor = secondaryBackButtonColor(),
+                                    contentColor = Color(0xFF7C3AED)
+                                )
                         ) {
                             Text(
                                 "Back",
@@ -953,19 +975,11 @@ class WidgetOverlayService : Service() {
                         }
                         Button(
                             onClick = { currentStep = EventStep.TIME },
-                            modifier = Modifier
-                                .weight(2f)
-                                .height(50.dp),
+                            modifier = Modifier.weight(2f).height(50.dp),
                             shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF7C3AED)
-                            )
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
                         ) {
-                            Text(
-                                "Next: Set Time",
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 15.sp
-                            )
+                            Text("Next: Set Time", fontWeight = FontWeight.Bold, fontSize = 15.sp)
                         }
                     }
                 }
@@ -980,24 +994,33 @@ class WidgetOverlayService : Service() {
                         Switch(
                             checked = eventState.isAllDay,
                             onCheckedChange = { eventState.isAllDay = it },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = Color.White,
-                                checkedTrackColor = Color(0xFF7C3AED),
-                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                                uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
-                            )
+                            colors =
+                                SwitchDefaults.colors(
+                                    checkedThumbColor = Color.White,
+                                    checkedTrackColor = Color(0xFF7C3AED),
+                                    uncheckedThumbColor =
+                                        MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                    uncheckedTrackColor = MaterialTheme.colorScheme.surfaceVariant
+                                )
                         )
                     }
 
                     AnimatedVisibility(visible = !eventState.isAllDay) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                            Spacer(Modifier.height(24.dp))
-                            TimeInputCustom(state = eventState)
-                            Spacer(Modifier.height(24.dp))
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            color = overlayInnerContentColor()
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(vertical = 24.dp, horizontal = 12.dp)
+                            ) {
+                                TimeInputCustom(state = eventState)
+                            }
                         }
                     }
 
-                    if (eventState.isAllDay) Spacer(Modifier.height(24.dp))
+                    Spacer(Modifier.height(if (eventState.isAllDay) 24.dp else 16.dp))
 
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -1005,14 +1028,13 @@ class WidgetOverlayService : Service() {
                     ) {
                         Button(
                             onClick = { currentStep = EventStep.DATE },
-                            modifier = Modifier
-                                .weight(1f)
-                                .height(50.dp),
+                            modifier = Modifier.weight(1f).height(50.dp),
                             shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color.White,
-                                contentColor = Color(0xFF7C3AED)
-                            )
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor = secondaryBackButtonColor(),
+                                    contentColor = Color(0xFF7C3AED)
+                                )
                         ) {
                             Text(
                                 "Back",
@@ -1024,13 +1046,9 @@ class WidgetOverlayService : Service() {
                         Button(
                             onClick = { saveEvent() },
                             enabled = !eventState.isSaving,
-                            modifier = Modifier
-                                .weight(2f)
-                                .height(50.dp),
+                            modifier = Modifier.weight(2f).height(50.dp),
                             shape = RoundedCornerShape(14.dp),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = Color(0xFF7C3AED)
-                            )
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7C3AED))
                         ) {
                             Text(
                                 if (eventState.isSaving) "Saving..." else "Create Event",
@@ -1052,61 +1070,58 @@ class WidgetOverlayService : Service() {
         LaunchedEffect(Unit) {
             offsetY.animateTo(
                 targetValue = 0f,
-                animationSpec = tween(
-                    durationMillis = 2000,
-                    easing = FastOutSlowInEasing
-                )
+                animationSpec = tween(durationMillis = 2000, easing = FastOutSlowInEasing)
             )
         }
 
         val alpha = (1f - offsetY.value / 600f).coerceIn(0f, 1f)
 
-        Box(
-            modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.BottomCenter
-        ) {
+        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.BottomCenter) {
             Box(
-                modifier = Modifier
-                    .padding(bottom = 160.dp)
-                    .offset { IntOffset(x = 0, y = offsetY.value.toInt()) }
-                    .alpha(alpha)
-                    .shadow(
-                        elevation = 24.dp,
-                        spotColor = purple,
-                        ambientColor = purple,
-                        shape = RoundedCornerShape(20.dp)
-                    )
-                    .shadow(
-                        elevation = 16.dp,
-                        spotColor = purple,
-                        ambientColor = purple,
-                        shape = RoundedCornerShape(20.dp)
-                    )
-                    .shadow(
-                        elevation = 8.dp,
-                        spotColor = Color.White,
-                        ambientColor = Color.White,
-                        shape = RoundedCornerShape(20.dp)
-                    )
-                    .background(color = Color.White, shape = RoundedCornerShape(20.dp))
-                    .defaultMinSize(minWidth = 60.dp, minHeight = 60.dp)
-                    .padding(horizontal = 24.dp, vertical = 0.dp),
+                modifier =
+                    Modifier.padding(bottom = 160.dp)
+                        .offset { IntOffset(x = 0, y = offsetY.value.toInt()) }
+                        .alpha(alpha)
+                        .shadow(
+                            elevation = 24.dp,
+                            spotColor = purple,
+                            ambientColor = purple,
+                            shape = RoundedCornerShape(20.dp)
+                        )
+                        .shadow(
+                            elevation = 16.dp,
+                            spotColor = purple,
+                            ambientColor = purple,
+                            shape = RoundedCornerShape(20.dp)
+                        )
+                        .shadow(
+                            elevation = 8.dp,
+                            spotColor = Color.White,
+                            ambientColor = Color.White,
+                            shape = RoundedCornerShape(20.dp)
+                        )
+                        .background(color = Color.White, shape = RoundedCornerShape(20.dp))
+                        .defaultMinSize(minWidth = 60.dp, minHeight = 60.dp)
+                        .padding(horizontal = 24.dp, vertical = 0.dp),
                 contentAlignment = Alignment.Center
             ) {
-                Text(
-                    text = message,
-                    color = purple,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
+                Text(text = message, color = purple, fontWeight = FontWeight.Bold, fontSize = 16.sp)
             }
         }
     }
 }
 
-enum class OverlayMode { ADD_TASK, MIC, ADD_EVENT }
+enum class OverlayMode {
+    ADD_TASK,
+    MIC,
+    ADD_EVENT
+}
 
-enum class EventStep { TITLE, DATE, TIME }
+enum class EventStep {
+    TITLE,
+    DATE,
+    TIME
+}
 
 class EventState {
     var title by mutableStateOf("")
