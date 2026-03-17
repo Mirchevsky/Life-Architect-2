@@ -39,10 +39,10 @@ import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.EmojiObjects
-import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.LocalFireDepartment
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.outlined.Lightbulb
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -59,6 +59,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimeInput
@@ -127,7 +128,9 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel) {
     ) { _ ->
         viewModel.refreshCalendarPermission()
         val state = resolvePermissionGateState(
-            context, Manifest.permission.READ_CALENDAR, permissionPrefs
+            context,
+            Manifest.permission.READ_CALENDAR,
+            permissionPrefs
         )
         when (state) {
             PermissionGateState.RequestableWithRationale -> showCalRationale = true
@@ -138,7 +141,9 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel) {
 
     fun requestCalendarPermission() {
         val state = resolvePermissionGateState(
-            context, Manifest.permission.READ_CALENDAR, permissionPrefs
+            context,
+            Manifest.permission.READ_CALENDAR,
+            permissionPrefs
         )
         when (state) {
             PermissionGateState.Granted -> viewModel.refreshCalendarPermission()
@@ -164,19 +169,25 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel) {
                 Text("Life Architect needs calendar access to show your device calendar events in the Analytics view.")
             },
             confirmButton = {
-                TextButton(onClick = {
-                    showCalRationale = false
-                    permissionPrefs.markRequested(Manifest.permission.READ_CALENDAR)
-                    calendarPermissionLauncher.launch(
-                        arrayOf(
-                            Manifest.permission.READ_CALENDAR,
-                            Manifest.permission.WRITE_CALENDAR
+                TextButton(
+                    onClick = {
+                        showCalRationale = false
+                        permissionPrefs.markRequested(Manifest.permission.READ_CALENDAR)
+                        calendarPermissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.READ_CALENDAR,
+                                Manifest.permission.WRITE_CALENDAR
+                            )
                         )
-                    )
-                }) { Text("Allow") }
+                    }
+                ) {
+                    Text("Allow")
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showCalRationale = false }) { Text("Not now") }
+                TextButton(onClick = { showCalRationale = false }) {
+                    Text("Not now")
+                }
             }
         )
     }
@@ -189,17 +200,23 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel) {
                 Text("You have permanently denied calendar access. To view device events, open Settings → Permissions → Calendar and enable it.")
             },
             confirmButton = {
-                TextButton(onClick = {
-                    showCalBlocked = false
-                    val intent = Intent(
-                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                        Uri.fromParts("package", context.packageName, null)
-                    )
-                    context.startActivity(intent)
-                }) { Text("Open Settings") }
+                TextButton(
+                    onClick = {
+                        showCalBlocked = false
+                        val intent = Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.fromParts("package", context.packageName, null)
+                        )
+                        context.startActivity(intent)
+                    }
+                ) {
+                    Text("Open Settings")
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showCalBlocked = false }) { Text("Cancel") }
+                TextButton(onClick = { showCalBlocked = false }) {
+                    Text("Cancel")
+                }
             }
         )
     }
@@ -209,6 +226,7 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 viewModel.refreshCalendarPermission()
+                viewModel.refreshDailyQuote()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -277,8 +295,18 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel) {
                         onRequestCalendarPermission = { requestCalendarPermission() }
                     )
                 }
-                item { CompletionChart(data = uiState.dailyCompletions, anchorDay = uiState.selectedDay) }
-                item { TipOfTheVisit() }
+                item {
+                    CompletionChart(
+                        data = uiState.dailyCompletions,
+                        anchorDay = uiState.selectedDay
+                    )
+                }
+                item {
+                    DailyQuoteCard(
+                        quoteText = uiState.dailyQuote.quote,
+                        personName = uiState.dailyQuote.person
+                    )
+                }
             }
         }
     }
@@ -385,12 +413,16 @@ private fun StatRow(
         StatCard(
             title = "Total Tasks",
             value = totalTasks.toString(),
-            modifier = Modifier.weight(1f).height(88.dp)
+            modifier = Modifier
+                .weight(1f)
+                .height(88.dp)
         )
         StatCard(
             title = "Calendar Events",
             value = totalCalendarEvents.toString(),
-            modifier = Modifier.weight(1f).height(88.dp),
+            modifier = Modifier
+                .weight(1f)
+                .height(88.dp),
             locked = !hasCalendarPermission,
             onUnlock = onGrantCalendarAccess
         )
@@ -538,6 +570,7 @@ private fun CompletionChart(
                         val count = data[day] ?: 0
                         val fraction = count.toFloat() / maxVal
                         val isAnchor = day == anchorDay
+
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.Bottom,
@@ -552,7 +585,9 @@ private fun CompletionChart(
                             } else {
                                 Spacer(modifier = Modifier.height(16.dp))
                             }
+
                             Spacer(modifier = Modifier.height(2.dp))
+
                             Box(
                                 modifier = Modifier
                                     .width(barWidth)
@@ -563,7 +598,9 @@ private fun CompletionChart(
                                         else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
                                     )
                             )
+
                             Spacer(modifier = Modifier.height(4.dp))
+
                             Text(
                                 text = day.dayOfMonth.toString(),
                                 style = MaterialTheme.typography.labelSmall,
@@ -575,9 +612,12 @@ private fun CompletionChart(
                     }
                 }
             }
+
             Spacer(modifier = Modifier.height(6.dp))
+
             val thumbColor = MaterialTheme.colorScheme.primary
             val trackColor = MaterialTheme.colorScheme.surfaceVariant
+
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -607,7 +647,10 @@ private fun CompletionChart(
                                 val scrollDelta = (dragAmount / (size.width * thumbFraction)) * maxScroll
                                 scope.launch {
                                     scrollState.scrollTo(
-                                        (scrollState.value + scrollDelta.toInt()).coerceIn(0, scrollState.maxValue)
+                                        (scrollState.value + scrollDelta.toInt()).coerceIn(
+                                            0,
+                                            scrollState.maxValue
+                                        )
                                     )
                                 }
                             }
@@ -754,9 +797,11 @@ private fun MonthBlock(
                                         isSelected -> Modifier
                                             .clip(CircleShape)
                                             .background(MaterialTheme.colorScheme.primary)
+
                                         isToday -> Modifier
                                             .clip(CircleShape)
                                             .background(MaterialTheme.colorScheme.primaryContainer)
+
                                         else -> Modifier
                                     }
                                 ),
@@ -890,7 +935,11 @@ private fun DayDetailPanel(
                                     Text(
                                         text = task.title,
                                         style = MaterialTheme.typography.bodyLarge.copy(
-                                            textDecoration = if (isCompleted) TextDecoration.LineThrough else TextDecoration.None
+                                            textDecoration = if (isCompleted) {
+                                                TextDecoration.LineThrough
+                                            } else {
+                                                TextDecoration.None
+                                            }
                                         ),
                                         color = if (isCompleted) {
                                             MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
@@ -1050,7 +1099,8 @@ private fun CalendarEventRow(
         "All day"
     } else {
         LocalTime.ofInstant(
-            Instant.ofEpochMilli(event.startMillis), zone
+            Instant.ofEpochMilli(event.startMillis),
+            zone
         ).format(timeFormatter)
     }
 
@@ -1124,13 +1174,19 @@ private fun CalendarEventRow(
             title = { Text("Delete event?") },
             text = { Text("This will remove the event from your device calendar.") },
             confirmButton = {
-                TextButton(onClick = {
-                    onDelete(event.id)
-                    showDeleteDialog = false
-                }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                TextButton(
+                    onClick = {
+                        onDelete(event.id)
+                        showDeleteDialog = false
+                    }
+                ) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+                TextButton(onClick = { showDeleteDialog = false }) {
+                    Text("Cancel")
+                }
             }
         )
     }
@@ -1208,7 +1264,7 @@ private fun EditCalendarEventDialog(
         title = { Text("Edit event") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                androidx.compose.material3.OutlinedTextField(
+                OutlinedTextField(
                     value = title,
                     onValueChange = {
                         title = it
@@ -1224,7 +1280,10 @@ private fun EditCalendarEventDialog(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Checkbox(checked = isAllDay, onCheckedChange = { isAllDay = it })
+                    Checkbox(
+                        checked = isAllDay,
+                        onCheckedChange = { isAllDay = it }
+                    )
                     Text("All day")
                 }
 
@@ -1256,10 +1315,14 @@ private fun EditCalendarEventDialog(
             }
         },
         confirmButton = {
-            TextButton(onClick = { submit() }) { Text("Save") }
+            TextButton(onClick = { submit() }) {
+                Text("Save")
+            }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) { Text("Cancel") }
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
         }
     )
 
@@ -1267,15 +1330,21 @@ private fun EditCalendarEventDialog(
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
             confirmButton = {
-                TextButton(onClick = {
-                    datePickerState.selectedDateMillis?.let { millis ->
-                        selectedDate = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
+                TextButton(
+                    onClick = {
+                        datePickerState.selectedDateMillis?.let { millis ->
+                            selectedDate = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
+                        }
+                        showDatePicker = false
                     }
-                    showDatePicker = false
-                }) { Text("Confirm") }
+                ) {
+                    Text("Confirm")
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
+                TextButton(onClick = { showDatePicker = false }) {
+                    Text("Cancel")
+                }
             }
         ) {
             DatePicker(state = datePickerState)
@@ -1303,12 +1372,18 @@ private fun EditCalendarEventDialog(
                             .padding(top = 12.dp),
                         horizontalArrangement = Arrangement.End
                     ) {
-                        TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
-                        TextButton(onClick = {
-                            selectedHour = timePickerState.hour
-                            selectedMinute = timePickerState.minute
-                            showTimePicker = false
-                        }) { Text("Confirm") }
+                        TextButton(onClick = { showTimePicker = false }) {
+                            Text("Cancel")
+                        }
+                        TextButton(
+                            onClick = {
+                                selectedHour = timePickerState.hour
+                                selectedMinute = timePickerState.minute
+                                showTimePicker = false
+                            }
+                        ) {
+                            Text("Confirm")
+                        }
                     }
                 }
             }
@@ -1316,22 +1391,12 @@ private fun EditCalendarEventDialog(
     }
 }
 
-private val APP_TIPS = listOf(
-    "Assign a difficulty to every task — Easy, Medium, or Hard tasks award different XP amounts, so harder tasks are worth the extra push.",
-    "Your daily streak resets if you skip a full day without completing any task. Even finishing one small Easy task keeps the streak alive.",
-    "Tap the calendar icon on any task to open it directly in your device's calendar app and set a reminder.",
-    "The Analytics tab shows your last 30 days of completions. Tap any day on the calendar to see exactly which tasks were scheduled for that day.",
-    "Completing your first three tasks of the day earns a streak bonus — XP rewards drop after that, so front-load your most important work.",
-    "Tasks completed after their due date are marked Overdue in the day-detail panel. Use this to spot recurring scheduling blind spots.",
-    "A 7-day streak awards a bonus XP payout. Reaching a 30-day streak unlocks an even larger milestone reward.",
-    "Repeating the same task title within 24 hours earns only 25% of the normal XP — vary your tasks to maximise your gains.",
-    "Every task has a 20% chance of triggering a Critical Hit, which multiplies your XP reward by up to 3×. You cannot predict it, but you can increase your chances by completing more unique tasks.",
-    "The green dot on a calendar day means all tasks for that day are done. A red dot means at least one task is still pending — a quick visual cue for what needs attention."
-)
-
 @Composable
-private fun TipOfTheVisit() {
-    val tip = remember { APP_TIPS.random() }
+private fun DailyQuoteCard(
+    quoteText: String,
+    personName: String
+) {
+    if (quoteText.isBlank() || personName.isBlank()) return
 
     Card(
         modifier = Modifier.fillMaxWidth(),
@@ -1346,21 +1411,26 @@ private fun TipOfTheVisit() {
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Icon(
-                imageVector = Icons.Default.EmojiObjects,
+                imageVector = Icons.Outlined.Lightbulb,
                 contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                tint = BrandGreen,
                 modifier = Modifier.size(24.dp)
             )
             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    text = "Tip",
+                    text = "Daily Quote",
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Text(
-                    text = tip,
+                    text = quoteText,
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = "— $personName",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }

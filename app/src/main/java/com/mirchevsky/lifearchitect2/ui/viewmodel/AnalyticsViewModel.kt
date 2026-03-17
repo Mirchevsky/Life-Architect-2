@@ -8,18 +8,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mirchevsky.lifearchitect2.data.AppRepository
 import com.mirchevsky.lifearchitect2.data.CalendarEvent
+import com.mirchevsky.lifearchitect2.data.DailyQuote
+import com.mirchevsky.lifearchitect2.data.DailyQuoteEngine
 import com.mirchevsky.lifearchitect2.data.DeviceCalendarRepository
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
 import com.mirchevsky.lifearchitect2.data.db.entity.UserEntity
 import com.mirchevsky.lifearchitect2.domain.TaskDifficulty
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
-import kotlinx.coroutines.launch
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
@@ -28,6 +22,14 @@ import java.time.temporal.WeekFields
 import java.util.Locale
 import kotlin.math.pow
 import kotlin.random.Random
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.launch
 
 enum class DayStatus {
     PENDING, COMPLETED, BOTH
@@ -39,6 +41,7 @@ data class AnalyticsUiState(
     val level: Int = 1,
     val xp: Int = 0,
     val dailyStreak: Int = 0,
+
     // Stats
     val totalTasksCompleted: Int = 0,
     val totalCalendarEvents: Int = 0,
@@ -48,13 +51,16 @@ data class AnalyticsUiState(
     val overdueCompletions: Int = 0,
     val bestDay: Pair<LocalDate, Int>? = null,
     val bestWeek: Pair<LocalDate, Int>? = null,
+
     // Day-detail panel
     val selectedDay: LocalDate = LocalDate.now(),
     val tasksForSelectedDay: List<TaskEntity> = emptyList(),
+
     // Device calendar
     val calendarEventsForSelectedDay: List<CalendarEvent> = emptyList(),
     val calendarEventDays: Set<LocalDate> = emptySet(),
     val totalDeviceCalendarEvents: Int = 0,
+    val dailyQuote: DailyQuote = DailyQuote(person = "", quote = ""),
     val hasCalendarPermission: Boolean = false,
     val hasCalendarWritePermission: Boolean = false,
     val isLoading: Boolean = true
@@ -78,8 +84,11 @@ class AnalyticsViewModel(
     private val _hasCalendarWritePermission = MutableStateFlow(checkCalendarWritePermission())
 
     private val deviceCalendarRepo = DeviceCalendarRepository(appContext)
+    private val dailyQuoteEngine = DailyQuoteEngine(appContext)
 
     init {
+        refreshDailyQuote()
+
         // ── Task-based state ────────────────────────────────────────────────
         viewModelScope.launch {
             combine(
@@ -115,6 +124,7 @@ class AnalyticsViewModel(
                         val date = Instant.ofEpochMilli(task.completedAt!!).atZone(zone).toLocalDate()
                         date.with(weekFields.dayOfWeek(), 1)
                     }
+
                 val bestWeek = weeklyCompletions
                     .maxByOrNull { it.value.size }
                     ?.let { it.key to it.value.size }
@@ -122,6 +132,7 @@ class AnalyticsViewModel(
                 val onTime = completedTasks.count {
                     it.dueDate != null && it.completedAt != null && it.completedAt <= it.dueDate
                 }
+
                 val overdue = completedTasks.count {
                     it.dueDate != null && it.completedAt != null && it.completedAt > it.dueDate
                 }
@@ -164,10 +175,12 @@ class AnalyticsViewModel(
                     task.dueDate != null &&
                             Instant.ofEpochMilli(task.dueDate).atZone(zone).toLocalDate() == resolvedDay
                 }
+
                 val completedForDay = completedTasks.filter { task ->
                     task.dueDate != null &&
                             Instant.ofEpochMilli(task.dueDate).atZone(zone).toLocalDate() == resolvedDay
                 }
+
                 val tasksForDay = pendingForDay + completedForDay
 
                 // Preserve existing calendar events and permission state while task state updates
@@ -190,6 +203,7 @@ class AnalyticsViewModel(
                     calendarEventsForSelectedDay = current.calendarEventsForSelectedDay,
                     calendarEventDays = current.calendarEventDays,
                     totalDeviceCalendarEvents = current.totalDeviceCalendarEvents,
+                    dailyQuote = current.dailyQuote,
                     hasCalendarPermission = current.hasCalendarPermission,
                     hasCalendarWritePermission = current.hasCalendarWritePermission,
                     isLoading = false
@@ -255,6 +269,7 @@ class AnalyticsViewModel(
         if (_hasCalendarPermission.value != readGranted) {
             _hasCalendarPermission.value = readGranted
         }
+
         val writeGranted = checkCalendarWritePermission()
         if (_hasCalendarWritePermission.value != writeGranted) {
             _hasCalendarWritePermission.value = writeGranted
@@ -267,6 +282,12 @@ class AnalyticsViewModel(
         )
     }
 
+    fun refreshDailyQuote() {
+        _uiState.value = _uiState.value.copy(
+            dailyQuote = dailyQuoteEngine.getDailyQuote()
+        )
+    }
+
     fun updateCalendarEvent(
         eventId: Long,
         title: String,
@@ -275,6 +296,7 @@ class AnalyticsViewModel(
         isAllDay: Boolean
     ) = viewModelScope.launch {
         if (!_hasCalendarPermission.value || !_hasCalendarWritePermission.value) return@launch
+
         deviceCalendarRepo.updateEvent(
             eventId,
             DeviceCalendarRepository.EventUpdate(
@@ -299,9 +321,11 @@ class AnalyticsViewModel(
         val now = System.currentTimeMillis()
         val todayEpochDay = now / 86_400_000L
 
-        val resetUser = if (user.todayResetDay < todayEpochDay)
+        val resetUser = if (user.todayResetDay < todayEpochDay) {
             user.copy(tasksCompletedToday = 0, todayResetDay = todayEpochDay)
-        else user
+        } else {
+            user
+        }
 
         val userWithStreak = updateStreak(resetUser, todayEpochDay)
 
@@ -309,26 +333,33 @@ class AnalyticsViewModel(
         val baseXp = difficulty.xpValue
         val completedToday = userWithStreak.tasksCompletedToday
         val tieredXp = when {
-            completedToday < 7  -> baseXp
+            completedToday < 7 -> baseXp
             completedToday < 15 -> (baseXp * 0.50f).toInt()
-            else                -> (baseXp * 0.10f).toInt()
+            else -> (baseXp * 0.10f).toInt()
         }
 
         val recentCompleted = repository.getCompletedTasks().first()
         val recentTitles = recentCompleted
             .filter { it.completedAt != null && (now - it.completedAt) < 86_400_000L }
             .map { it.title.trim().lowercase() }
+
         val isRepeat = task.title.trim().lowercase() in recentTitles
         val afterRepeatXp = if (isRepeat) (tieredXp * 0.25f).toInt() else tieredXp
 
         val streakBonusEligible = userWithStreak.dailyStreak >= 2 && completedToday < 3
-        val afterStreakXp = if (streakBonusEligible) (afterRepeatXp * 1.25f).toInt() else afterRepeatXp
+        val afterStreakXp = if (streakBonusEligible) {
+            (afterRepeatXp * 1.25f).toInt()
+        } else {
+            afterRepeatXp
+        }
 
         val isXpCritical = !isRepeat && Random.nextFloat() < 0.20f
         val finalXp = if (isXpCritical) {
             val multiplier = 1.5f + Random.nextFloat() * 1.5f
             (afterStreakXp * multiplier).toInt()
-        } else afterStreakXp
+        } else {
+            afterStreakXp
+        }
 
         var finalUser = checkLevelUp(
             userWithStreak.copy(
@@ -338,25 +369,52 @@ class AnalyticsViewModel(
             )
         )
 
-        val weeklyBonus = if (finalUser.dailyStreak > 0 && finalUser.dailyStreak % 7 == 0 && !finalUser.weeklyStreakClaimed) 500 else 0
+        val weeklyBonus = if (
+            finalUser.dailyStreak > 0 &&
+            finalUser.dailyStreak % 7 == 0 &&
+            !finalUser.weeklyStreakClaimed
+        ) {
+            500
+        } else {
+            0
+        }
+
         if (weeklyBonus > 0) {
-            finalUser = checkLevelUp(finalUser.copy(
-                xp = finalUser.xp + weeklyBonus,
-                totalXp = finalUser.totalXp + weeklyBonus,
-                weeklyStreakClaimed = true
-            ))
+            finalUser = checkLevelUp(
+                finalUser.copy(
+                    xp = finalUser.xp + weeklyBonus,
+                    totalXp = finalUser.totalXp + weeklyBonus,
+                    weeklyStreakClaimed = true
+                )
+            )
         }
 
-        val monthlyBonus = if (finalUser.dailyStreak >= 30 && !finalUser.monthlyMilestoneClaimed) 2500 else 0
+        val monthlyBonus = if (
+            finalUser.dailyStreak >= 30 &&
+            !finalUser.monthlyMilestoneClaimed
+        ) {
+            2500
+        } else {
+            0
+        }
+
         if (monthlyBonus > 0) {
-            finalUser = checkLevelUp(finalUser.copy(
-                xp = finalUser.xp + monthlyBonus,
-                totalXp = finalUser.totalXp + monthlyBonus,
-                monthlyMilestoneClaimed = true
-            ))
+            finalUser = checkLevelUp(
+                finalUser.copy(
+                    xp = finalUser.xp + monthlyBonus,
+                    totalXp = finalUser.totalXp + monthlyBonus,
+                    monthlyMilestoneClaimed = true
+                )
+            )
         }
 
-        repository.updateTask(task.copy(isCompleted = true, status = "completed", completedAt = now))
+        repository.updateTask(
+            task.copy(
+                isCompleted = true,
+                status = "completed",
+                completedAt = now
+            )
+        )
         repository.updateUser(finalUser)
     }
 
@@ -364,12 +422,14 @@ class AnalyticsViewModel(
 
     private fun checkCalendarReadPermission(): Boolean =
         ContextCompat.checkSelfPermission(
-            appContext, Manifest.permission.READ_CALENDAR
+            appContext,
+            Manifest.permission.READ_CALENDAR
         ) == PackageManager.PERMISSION_GRANTED
 
     private fun checkCalendarWritePermission(): Boolean =
         ContextCompat.checkSelfPermission(
-            appContext, Manifest.permission.WRITE_CALENDAR
+            appContext,
+            Manifest.permission.WRITE_CALENDAR
         ) == PackageManager.PERMISSION_GRANTED
 
     private fun updateStreak(user: UserEntity, todayEpochDay: Long): UserEntity {
@@ -379,7 +439,11 @@ class AnalyticsViewModel(
             yesterday -> user.copy(
                 dailyStreak = user.dailyStreak + 1,
                 lastCompletionDay = todayEpochDay,
-                weeklyStreakClaimed = if (user.dailyStreak + 1 < 7) false else user.weeklyStreakClaimed
+                weeklyStreakClaimed = if (user.dailyStreak + 1 < 7) {
+                    false
+                } else {
+                    user.weeklyStreakClaimed
+                }
             )
             else -> user.copy(
                 dailyStreak = 1,
