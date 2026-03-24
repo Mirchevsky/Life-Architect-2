@@ -10,8 +10,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.gestures.detectHorizontalDragGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -30,7 +28,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -71,16 +68,13 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -109,7 +103,6 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import java.time.format.TextStyle
 import java.util.Locale
-import kotlinx.coroutines.launch
 
 private val Purple = Color(0xFF7B2FBE)
 
@@ -296,9 +289,9 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel) {
                     )
                 }
                 item {
-                    CompletionChart(
-                        data = uiState.dailyCompletions,
-                        anchorDay = uiState.selectedDay
+                    TodaysGlobalEventCard(
+                        event = uiState.todayGlobalEvent,
+                        tomorrowTitle = uiState.tomorrowEventTitle
                     )
                 }
                 item {
@@ -531,132 +524,69 @@ private fun StatCard(
 }
 
 @Composable
-private fun CompletionChart(
-    data: Map<LocalDate, Int>,
-    anchorDay: LocalDate
+private fun TodaysGlobalEventCard(
+    event: com.mirchevsky.lifearchitect2.data.GlobalEvent,
+    tomorrowTitle: String
 ) {
-    if (data.isEmpty()) return
-
-    val scope = rememberCoroutineScope()
-    val scrollState = rememberScrollState()
-
-    val sortedDays = data.keys.sortedDescending()
-    val maxVal = data.values.maxOrNull()?.coerceAtLeast(1) ?: 1
-    val barWidth = 20.dp
-    val barMaxHeight = 80.dp
-
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(
-                text = "Last 30 Days",
-                style = MaterialTheme.typography.titleMedium
-            )
-            Spacer(modifier = Modifier.height(12.dp))
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(scrollState)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                Icon(
+                    imageVector = Icons.Outlined.Lightbulb,
+                    contentDescription = null,
+                    tint = BrandOrange,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = "Today's Global Event",
+                    style = MaterialTheme.typography.titleMedium
+                )
+            }
+            Spacer(modifier = Modifier.height(10.dp))
+            Text(
+                text = event.title,
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+            Text(
+                text = event.description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                lineHeight = 18.sp
+            )
+            if (tomorrowTitle.isNotBlank()) {
+                Spacer(modifier = Modifier.height(12.dp))
+                HorizontalDivider(
+                    color = MaterialTheme.colorScheme.outlineVariant,
+                    thickness = 0.5.dp
+                )
+                Spacer(modifier = Modifier.height(8.dp))
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    verticalAlignment = Alignment.Bottom,
-                    modifier = Modifier.height(barMaxHeight + 24.dp)
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    sortedDays.forEach { day ->
-                        val count = data[day] ?: 0
-                        val fraction = count.toFloat() / maxVal
-                        val isAnchor = day == anchorDay
-
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.Bottom,
-                            modifier = Modifier.height(barMaxHeight + 24.dp)
-                        ) {
-                            if (count > 0) {
-                                Text(
-                                    text = count.toString(),
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            } else {
-                                Spacer(modifier = Modifier.height(16.dp))
-                            }
-
-                            Spacer(modifier = Modifier.height(2.dp))
-
-                            Box(
-                                modifier = Modifier
-                                    .width(barWidth)
-                                    .height((barMaxHeight.value * fraction.coerceAtLeast(0.05f)).dp)
-                                    .clip(RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp))
-                                    .background(
-                                        if (isAnchor) MaterialTheme.colorScheme.primary
-                                        else MaterialTheme.colorScheme.primary.copy(alpha = 0.4f)
-                                    )
-                            )
-
-                            Spacer(modifier = Modifier.height(4.dp))
-
-                            Text(
-                                text = day.dayOfMonth.toString(),
-                                style = MaterialTheme.typography.labelSmall,
-                                color = if (isAnchor) MaterialTheme.colorScheme.primary
-                                else MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.width(barWidth)
-                            )
-                        }
-                    }
+                    Text(
+                        text = "Tomorrow:",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = tomorrowTitle,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
                 }
             }
-
-            Spacer(modifier = Modifier.height(6.dp))
-
-            val thumbColor = MaterialTheme.colorScheme.primary
-            val trackColor = MaterialTheme.colorScheme.surfaceVariant
-
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(8.dp)
-                    .clip(CircleShape)
-                    .background(trackColor)
-                    .drawBehind {
-                        val maxScroll = scrollState.maxValue.toFloat()
-                        val current = scrollState.value.toFloat()
-                        if (maxScroll > 0f) {
-                            val thumbFraction = size.width / (size.width + maxScroll)
-                            val thumbWidth = size.width * thumbFraction
-                            val thumbX = (current / maxScroll) * (size.width - thumbWidth)
-                            drawRoundRect(
-                                color = thumbColor,
-                                topLeft = androidx.compose.ui.geometry.Offset(thumbX, 0f),
-                                size = androidx.compose.ui.geometry.Size(thumbWidth, size.height),
-                                cornerRadius = androidx.compose.ui.geometry.CornerRadius(size.height / 2)
-                            )
-                        }
-                    }
-                    .pointerInput(scrollState.maxValue) {
-                        detectHorizontalDragGestures { _, dragAmount ->
-                            val maxScroll = scrollState.maxValue.toFloat()
-                            if (maxScroll > 0f) {
-                                val thumbFraction = size.width / (size.width + maxScroll)
-                                val scrollDelta = (dragAmount / (size.width * thumbFraction)) * maxScroll
-                                scope.launch {
-                                    scrollState.scrollTo(
-                                        (scrollState.value + scrollDelta.toInt()).coerceIn(
-                                            0,
-                                            scrollState.maxValue
-                                        )
-                                    )
-                                }
-                            }
-                        }
-                    }
-            )
         }
     }
 }

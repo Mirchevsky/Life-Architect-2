@@ -10,6 +10,8 @@ import com.mirchevsky.lifearchitect2.data.AppRepository
 import com.mirchevsky.lifearchitect2.data.CalendarEvent
 import com.mirchevsky.lifearchitect2.data.DailyQuote
 import com.mirchevsky.lifearchitect2.data.DailyQuoteEngine
+import com.mirchevsky.lifearchitect2.data.GlobalEvent
+import com.mirchevsky.lifearchitect2.data.GlobalEventsEngine
 import com.mirchevsky.lifearchitect2.data.DeviceCalendarRepository
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
 import com.mirchevsky.lifearchitect2.data.db.entity.UserEntity
@@ -61,6 +63,8 @@ data class AnalyticsUiState(
     val calendarEventDays: Set<LocalDate> = emptySet(),
     val totalDeviceCalendarEvents: Int = 0,
     val dailyQuote: DailyQuote = DailyQuote(person = "", quote = ""),
+    val todayGlobalEvent: GlobalEvent = GlobalEvent(title = "", description = ""),
+    val tomorrowEventTitle: String = "",
     val hasCalendarPermission: Boolean = false,
     val hasCalendarWritePermission: Boolean = false,
     val isLoading: Boolean = true
@@ -85,9 +89,11 @@ class AnalyticsViewModel(
 
     private val deviceCalendarRepo = DeviceCalendarRepository(appContext)
     private val dailyQuoteEngine = DailyQuoteEngine(appContext)
+    private val globalEventsEngine = GlobalEventsEngine()
 
     init {
         refreshDailyQuote()
+        refreshGlobalEvent()
 
         // ── Task-based state ────────────────────────────────────────────────
         viewModelScope.launch {
@@ -285,6 +291,13 @@ class AnalyticsViewModel(
     fun refreshDailyQuote() {
         _uiState.value = _uiState.value.copy(
             dailyQuote = dailyQuoteEngine.getDailyQuote()
+        )
+    }
+
+    fun refreshGlobalEvent() {
+        _uiState.value = _uiState.value.copy(
+            todayGlobalEvent = globalEventsEngine.getTodayEvent(),
+            tomorrowEventTitle = globalEventsEngine.getTomorrowTitle()
         )
     }
 
