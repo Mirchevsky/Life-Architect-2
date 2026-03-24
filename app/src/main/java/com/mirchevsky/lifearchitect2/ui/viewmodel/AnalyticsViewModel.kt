@@ -10,9 +10,9 @@ import com.mirchevsky.lifearchitect2.data.AppRepository
 import com.mirchevsky.lifearchitect2.data.CalendarEvent
 import com.mirchevsky.lifearchitect2.data.DailyQuote
 import com.mirchevsky.lifearchitect2.data.DailyQuoteEngine
+import com.mirchevsky.lifearchitect2.data.DeviceCalendarRepository
 import com.mirchevsky.lifearchitect2.data.GlobalEvent
 import com.mirchevsky.lifearchitect2.data.GlobalEventsEngine
-import com.mirchevsky.lifearchitect2.data.DeviceCalendarRepository
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
 import com.mirchevsky.lifearchitect2.data.db.entity.UserEntity
 import com.mirchevsky.lifearchitect2.domain.TaskDifficulty
@@ -34,7 +34,9 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 enum class DayStatus {
-    PENDING, COMPLETED, BOTH
+    PENDING,
+    COMPLETED,
+    BOTH
 }
 
 data class AnalyticsUiState(
@@ -62,6 +64,7 @@ data class AnalyticsUiState(
     val calendarEventsForSelectedDay: List<CalendarEvent> = emptyList(),
     val calendarEventDays: Set<LocalDate> = emptySet(),
     val totalDeviceCalendarEvents: Int = 0,
+
     val dailyQuote: DailyQuote = DailyQuote(person = "", quote = ""),
     val todayGlobalEvent: GlobalEvent = GlobalEvent(title = "", description = ""),
     val tomorrowEventTitle: String = "",
@@ -112,7 +115,9 @@ class AnalyticsViewModel(
                 val tasksByDate = completedTasks
                     .filter { it.completedAt != null }
                     .groupBy { task ->
-                        Instant.ofEpochMilli(task.completedAt!!).atZone(zone).toLocalDate()
+                        Instant.ofEpochMilli(task.completedAt!!)
+                            .atZone(zone)
+                            .toLocalDate()
                     }
 
                 val dailyCompletions = (0..29).associate { offset ->
@@ -127,7 +132,9 @@ class AnalyticsViewModel(
                 val weeklyCompletions = completedTasks
                     .filter { it.completedAt != null }
                     .groupBy { task ->
-                        val date = Instant.ofEpochMilli(task.completedAt!!).atZone(zone).toLocalDate()
+                        val date = Instant.ofEpochMilli(task.completedAt!!)
+                            .atZone(zone)
+                            .toLocalDate()
                         date.with(weekFields.dayOfWeek(), 1)
                     }
 
@@ -136,11 +143,15 @@ class AnalyticsViewModel(
                     ?.let { it.key to it.value.size }
 
                 val onTime = completedTasks.count {
-                    it.dueDate != null && it.completedAt != null && it.completedAt <= it.dueDate
+                    it.dueDate != null &&
+                            it.completedAt != null &&
+                            it.completedAt <= it.dueDate
                 }
 
                 val overdue = completedTasks.count {
-                    it.dueDate != null && it.completedAt != null && it.completedAt > it.dueDate
+                    it.dueDate != null &&
+                            it.completedAt != null &&
+                            it.completedAt > it.dueDate
                 }
 
                 val completedDays = completedTasks
@@ -154,9 +165,11 @@ class AnalyticsViewModel(
                     .toSet()
 
                 val totalCalendarEvents =
-                    completedTasks.count { it.dueDate != null } + pendingTasks.count { it.dueDate != null }
+                    completedTasks.count { it.dueDate != null } +
+                            pendingTasks.count { it.dueDate != null }
 
                 val allDays = completedDays + pendingDays
+
                 val monthlyStatus = allDays.associateWith { date ->
                     val hasCompleted = completedDays.contains(date)
                     val hasPending = pendingDays.contains(date)
@@ -179,18 +192,24 @@ class AnalyticsViewModel(
 
                 val pendingForDay = pendingTasks.filter { task ->
                     task.dueDate != null &&
-                            Instant.ofEpochMilli(task.dueDate).atZone(zone).toLocalDate() == resolvedDay
+                            Instant.ofEpochMilli(task.dueDate)
+                                .atZone(zone)
+                                .toLocalDate() == resolvedDay
                 }
 
                 val completedForDay = completedTasks.filter { task ->
                     task.dueDate != null &&
-                            Instant.ofEpochMilli(task.dueDate).atZone(zone).toLocalDate() == resolvedDay
+                            Instant.ofEpochMilli(task.dueDate!!)
+                                .atZone(zone)
+                                .toLocalDate() == resolvedDay
                 }
 
                 val tasksForDay = pendingForDay + completedForDay
 
-                // Preserve existing calendar events and permission state while task state updates
+                // Preserve existing calendar events, permissions, daily quote,
+                // and global event state while task state updates.
                 val current = _uiState.value
+
                 AnalyticsUiState(
                     userName = user.name,
                     level = user.level,
@@ -210,6 +229,8 @@ class AnalyticsViewModel(
                     calendarEventDays = current.calendarEventDays,
                     totalDeviceCalendarEvents = current.totalDeviceCalendarEvents,
                     dailyQuote = current.dailyQuote,
+                    todayGlobalEvent = current.todayGlobalEvent,
+                    tomorrowEventTitle = current.tomorrowEventTitle,
                     hasCalendarPermission = current.hasCalendarPermission,
                     hasCalendarWritePermission = current.hasCalendarWritePermission,
                     isLoading = false
@@ -224,8 +245,7 @@ class AnalyticsViewModel(
             combine(_selectedDay, _hasCalendarPermission) { day, hasPerm ->
                 day to hasPerm
             }.flatMapLatest { (day, hasPerm) ->
-                if (hasPerm) deviceCalendarRepo.observeEventsForDate(day)
-                else flowOf(emptyList())
+                if (hasPerm) deviceCalendarRepo.observeEventsForDate(day) else flowOf(emptyList())
             }.collect { events ->
                 _uiState.value = _uiState.value.copy(
                     calendarEventsForSelectedDay = events,
@@ -238,8 +258,11 @@ class AnalyticsViewModel(
         // ── Calendar event days for month grid dots ───────────────────────────
         viewModelScope.launch {
             _hasCalendarPermission.flatMapLatest { hasPerm ->
-                if (hasPerm) deviceCalendarRepo.observeEventDaysForMonth(YearMonth.now())
-                else flowOf(emptySet())
+                if (hasPerm) {
+                    deviceCalendarRepo.observeEventDaysForMonth(YearMonth.now())
+                } else {
+                    flowOf(emptySet())
+                }
             }.collect { days ->
                 _uiState.value = _uiState.value.copy(calendarEventDays = days)
             }
@@ -248,8 +271,7 @@ class AnalyticsViewModel(
         // ── Total device calendar event count ────────────────────────────────
         viewModelScope.launch {
             _hasCalendarPermission.flatMapLatest { hasPerm ->
-                if (hasPerm) deviceCalendarRepo.observeTotalEventCount()
-                else flowOf(0)
+                if (hasPerm) deviceCalendarRepo.observeTotalEventCount() else flowOf(0)
             }.collect { count ->
                 _uiState.value = _uiState.value.copy(
                     totalDeviceCalendarEvents = count,
@@ -328,8 +350,9 @@ class AnalyticsViewModel(
 
     /** Complete a task from the Analytics screen — full XP logic identical to MainViewModel. */
     fun completeTask(task: TaskEntity) = viewModelScope.launch {
-        val user = repository.getUserOnce()
-            ?: UserEntity(googleId = "local_user").also { repository.upsertUser(it) }
+        val user = repository.getUserOnce() ?: UserEntity(googleId = "local_user").also {
+            repository.upsertUser(it)
+        }
 
         val now = System.currentTimeMillis()
         val todayEpochDay = now / 86_400_000L
@@ -344,6 +367,7 @@ class AnalyticsViewModel(
 
         val difficulty = TaskDifficulty.valueOf(task.difficulty)
         val baseXp = difficulty.xpValue
+
         val completedToday = userWithStreak.tasksCompletedToday
         val tieredXp = when {
             completedToday < 7 -> baseXp
