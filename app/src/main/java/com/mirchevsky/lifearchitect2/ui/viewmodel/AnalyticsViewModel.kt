@@ -96,9 +96,9 @@ class AnalyticsViewModel(
 
     init {
         refreshDailyQuote()
-        refreshGlobalEvent()
+        refreshGlobalEvent(LocalDate.now())
 
-        // ── Task-based state ────────────────────────────────────────────────
+        // ── Task-based state ───────────────────────────────────────────────
         viewModelScope.launch {
             combine(
                 repository.observeUser("local_user"),
@@ -209,6 +209,10 @@ class AnalyticsViewModel(
                 // Preserve existing calendar events, permissions, daily quote,
                 // and global event state while task state updates.
                 val current = _uiState.value
+                val filteredCalendarEvents = filterTaskMirroredCalendarEvents(
+                    events = current.calendarEventsForSelectedDay,
+                    tasksForDay = tasksForDay
+                )
 
                 AnalyticsUiState(
                     userName = user.name,
@@ -225,7 +229,7 @@ class AnalyticsViewModel(
                     bestWeek = bestWeek,
                     selectedDay = resolvedDay,
                     tasksForSelectedDay = tasksForDay,
-                    calendarEventsForSelectedDay = current.calendarEventsForSelectedDay,
+                    calendarEventsForSelectedDay = filteredCalendarEvents,
                     calendarEventDays = current.calendarEventDays,
                     totalDeviceCalendarEvents = current.totalDeviceCalendarEvents,
                     dailyQuote = current.dailyQuote,
@@ -247,8 +251,12 @@ class AnalyticsViewModel(
             }.flatMapLatest { (day, hasPerm) ->
                 if (hasPerm) deviceCalendarRepo.observeEventsForDate(day) else flowOf(emptyList())
             }.collect { events ->
+                val current = _uiState.value
                 _uiState.value = _uiState.value.copy(
-                    calendarEventsForSelectedDay = events,
+                    calendarEventsForSelectedDay = filterTaskMirroredCalendarEvents(
+                        events = events,
+                        tasksForDay = current.tasksForSelectedDay
+                    ),
                     hasCalendarPermission = _hasCalendarPermission.value,
                     hasCalendarWritePermission = _hasCalendarWritePermission.value
                 )
@@ -286,6 +294,14 @@ class AnalyticsViewModel(
     /** Called when the user taps a day in the calendar. */
     fun selectDay(date: LocalDate) {
         _selectedDay.value = date
+        refreshGlobalEvent(date)
+    }
+
+    /** Called by AnalyticsScreen whenever the screen is entered/re-entered. */
+    fun onAnalyticsScreenOpened() {
+        val today = LocalDate.now()
+        _selectedDay.value = today
+        refreshGlobalEvent(today)
     }
 
     /**
@@ -316,10 +332,10 @@ class AnalyticsViewModel(
         )
     }
 
-    fun refreshGlobalEvent() {
+    fun refreshGlobalEvent(date: LocalDate = _selectedDay.value) {
         _uiState.value = _uiState.value.copy(
-            todayGlobalEvent = globalEventsEngine.getTodayEvent(),
-            tomorrowEventTitle = globalEventsEngine.getTomorrowTitle()
+            todayGlobalEvent = globalEventsEngine.getEventForDate(date),
+            tomorrowEventTitle = globalEventsEngine.getEventForDate(date.plusDays(1)).title
         )
     }
 
@@ -505,5 +521,23 @@ class AnalyticsViewModel(
     private fun getXpNeededForLevel(level: Int): Int {
         if (level <= 0) return 0
         return (100 * level.toDouble().pow(1.5)).toInt()
+    }
+
+    private fun filterTaskMirroredCalendarEvents(
+        events: List<CalendarEvent>,
+        tasksForDay: List<TaskEntity>
+    ): List<CalendarEvent> {
+        if (events.isEmpty() || tasksForDay.isEmpty()) return events
+
+        val normalizedTaskTitles = tasksForDay
+            .map { it.title.trim().lowercase() }
+            .filter { it.isNotBlank() }
+            .toSet()
+
+        if (normalizedTaskTitles.isEmpty()) return events
+
+        return events.filterNot { event ->
+            event.title.trim().lowercase() in normalizedTaskTitles
+        }
     }
 }

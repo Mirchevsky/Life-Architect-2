@@ -64,6 +64,7 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -78,14 +79,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.mirchevsky.lifearchitect2.data.CalendarEvent
-import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
 import com.mirchevsky.lifearchitect2.permissions.PermissionGateState
 import com.mirchevsky.lifearchitect2.permissions.PermissionPrefs
 import com.mirchevsky.lifearchitect2.permissions.resolvePermissionGateState
@@ -115,6 +114,10 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel) {
 
     var showCalRationale by rememberSaveable { mutableStateOf(false) }
     var showCalBlocked by rememberSaveable { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        viewModel.onAnalyticsScreenOpened()
+    }
 
     val calendarPermissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -270,11 +273,9 @@ fun AnalyticsScreen(viewModel: AnalyticsViewModel) {
                 item {
                     DayDetailPanel(
                         selectedDay = uiState.selectedDay,
-                        tasks = uiState.tasksForSelectedDay,
                         calendarEvents = uiState.calendarEventsForSelectedDay,
                         hasCalendarPermission = uiState.hasCalendarPermission,
                         hasCalendarWritePermission = uiState.hasCalendarWritePermission,
-                        onCompleteTask = { viewModel.completeTask(it) },
                         onEditCalendarEvent = { eventId, title, startMillis, endMillis, isAllDay ->
                             viewModel.updateCalendarEvent(
                                 eventId = eventId,
@@ -790,11 +791,9 @@ private fun MonthBlock(
 @Composable
 private fun DayDetailPanel(
     selectedDay: LocalDate,
-    tasks: List<TaskEntity>,
     calendarEvents: List<CalendarEvent>,
     hasCalendarPermission: Boolean,
     hasCalendarWritePermission: Boolean,
-    onCompleteTask: (TaskEntity) -> Unit,
     onEditCalendarEvent: (Long, String, Long, Long, Boolean) -> Unit,
     onDeleteCalendarEvent: (Long) -> Unit,
     onRequestCalendarPermission: () -> Unit
@@ -814,103 +813,6 @@ private fun DayDetailPanel(
                 text = selectedDay.format(formatter),
                 style = MaterialTheme.typography.titleMedium
             )
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (tasks.isEmpty()) {
-                Text(
-                    text = "No tasks scheduled for this day.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            } else {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    tasks.forEach { task ->
-                        val isCompleted = task.isCompleted
-                        val dueDate: LocalDate? = task.dueDate?.let {
-                            Instant.ofEpochMilli(it).atZone(zone).toLocalDate()
-                        }
-                        val isOverdue = !isCompleted && dueDate != null && dueDate.isBefore(LocalDate.now())
-
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface
-                            )
-                        ) {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .then(
-                                        if (!isCompleted) Modifier.clickable { onCompleteTask(task) }
-                                        else Modifier
-                                    )
-                                    .padding(horizontal = 12.dp, vertical = 12.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Checkbox(
-                                    checked = isCompleted,
-                                    onCheckedChange = if (!isCompleted) {
-                                        { _ -> onCompleteTask(task) }
-                                    } else {
-                                        null
-                                    },
-                                    colors = CheckboxDefaults.colors(
-                                        uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        checkedColor = MaterialTheme.colorScheme.primary,
-                                        disabledCheckedColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
-                                    )
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = task.title,
-                                        style = MaterialTheme.typography.bodyLarge.copy(
-                                            textDecoration = if (isCompleted) {
-                                                TextDecoration.LineThrough
-                                            } else {
-                                                TextDecoration.None
-                                            }
-                                        ),
-                                        color = if (isCompleted) {
-                                            MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurface
-                                        }
-                                    )
-                                    if (dueDate != null) {
-                                        val label = dueDate.format(DateTimeFormatter.ofPattern("MMM d"))
-                                        Text(
-                                            text = when {
-                                                isCompleted -> "Completed"
-                                                isOverdue -> "Overdue — $label"
-                                                else -> "Due $label"
-                                            },
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = when {
-                                                isCompleted -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-                                                isOverdue -> MaterialTheme.colorScheme.error
-                                                else -> MaterialTheme.colorScheme.onSurfaceVariant
-                                            }
-                                        )
-                                    }
-                                }
-                                if (dueDate != null && !isCompleted) {
-                                    Icon(
-                                        imageVector = Icons.Default.CalendarToday,
-                                        contentDescription = null,
-                                        tint = if (isOverdue) MaterialTheme.colorScheme.error
-                                        else MaterialTheme.colorScheme.primary,
-                                        modifier = Modifier
-                                            .size(20.dp)
-                                            .padding(start = 4.dp)
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
             Spacer(modifier = Modifier.height(16.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Spacer(modifier = Modifier.height(12.dp))
