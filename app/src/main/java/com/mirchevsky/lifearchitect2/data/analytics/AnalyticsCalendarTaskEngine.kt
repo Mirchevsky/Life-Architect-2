@@ -1,7 +1,6 @@
 package com.mirchevsky.lifearchitect2.data.analytics
 
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
-import com.mirchevsky.lifearchitect2.data.db.entity.UserEntity
 import com.mirchevsky.lifearchitect2.ui.viewmodel.DayStatus
 import java.time.Instant
 import java.time.LocalDate
@@ -18,11 +17,6 @@ import java.util.Locale
 class AnalyticsCalendarTaskEngine {
 
     data class Snapshot(
-        val userName: String,
-        val level: Int,
-        val xp: Int,
-        val dailyStreak: Int,
-        val totalTasksCompleted: Int,
         val dailyCompletions: Map<LocalDate, Int>,
         val monthlyTaskStatus: Map<LocalDate, DayStatus>,
         val onTimeCompletions: Int,
@@ -34,7 +28,6 @@ class AnalyticsCalendarTaskEngine {
     )
 
     fun buildSnapshot(
-        user: UserEntity,
         completedTasks: List<TaskEntity>,
         pendingTasks: List<TaskEntity>,
         selectedDay: LocalDate,
@@ -114,7 +107,7 @@ class AnalyticsCalendarTaskEngine {
 
         val pendingForDay = pendingTasks.filter { task ->
             task.dueDate != null &&
-                    Instant.ofEpochMilli(task.dueDate)
+                    Instant.ofEpochMilli(task.dueDate!!)
                         .atZone(zone)
                         .toLocalDate() == resolvedDay
         }
@@ -129,11 +122,6 @@ class AnalyticsCalendarTaskEngine {
         val tasksForDay = pendingForDay + completedForDay
 
         return Snapshot(
-            userName = user.name,
-            level = user.level,
-            xp = user.xp,
-            dailyStreak = user.dailyStreak,
-            totalTasksCompleted = completedTasks.size + pendingTasks.size,
             dailyCompletions = dailyCompletions,
             monthlyTaskStatus = monthlyStatus,
             onTimeCompletions = onTime,

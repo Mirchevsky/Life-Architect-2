@@ -13,10 +13,13 @@ import com.mirchevsky.lifearchitect2.data.DailyQuoteEngine
 import com.mirchevsky.lifearchitect2.data.DeviceCalendarRepository
 import com.mirchevsky.lifearchitect2.data.GlobalEvent
 import com.mirchevsky.lifearchitect2.data.GlobalEventsEngine
+import com.mirchevsky.lifearchitect2.data.analytics.AnalyticsCalendarCounterEngine
 import com.mirchevsky.lifearchitect2.data.analytics.AnalyticsCalendarEventFilterEngine
 import com.mirchevsky.lifearchitect2.data.analytics.AnalyticsCalendarTaskEngine
 import com.mirchevsky.lifearchitect2.data.analytics.AnalyticsDeviceCalendarEngine
 import com.mirchevsky.lifearchitect2.data.analytics.AnalyticsDeviceCalendarEngine.UpdateRequest
+import com.mirchevsky.lifearchitect2.data.analytics.AnalyticsTaskCounterEngine
+import com.mirchevsky.lifearchitect2.data.analytics.AnalyticsUserSummaryEngine
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
 import com.mirchevsky.lifearchitect2.data.db.entity.UserEntity
 import com.mirchevsky.lifearchitect2.domain.TaskDifficulty
@@ -89,6 +92,9 @@ class AnalyticsViewModel(
 
     private val analyticsTaskEngine = AnalyticsCalendarTaskEngine()
     private val analyticsCalendarFilterEngine = AnalyticsCalendarEventFilterEngine()
+    private val analyticsTaskCounterEngine = AnalyticsTaskCounterEngine()
+    private val analyticsUserSummaryEngine = AnalyticsUserSummaryEngine()
+    private val analyticsCalendarCounterEngine = AnalyticsCalendarCounterEngine()
     private val analyticsDeviceCalendarEngine =
         AnalyticsDeviceCalendarEngine(DeviceCalendarRepository(appContext))
     private val dailyQuoteEngine = DailyQuoteEngine(appContext)
@@ -109,10 +115,14 @@ class AnalyticsViewModel(
                 if (user == null) return@combine AnalyticsUiState(isLoading = false)
 
                 val snapshot = analyticsTaskEngine.buildSnapshot(
-                    user = user,
                     completedTasks = completedTasks,
                     pendingTasks = pendingTasks,
                     selectedDay = selectedDay
+                )
+                val userSummary = analyticsUserSummaryEngine.buildUserSummary(user)
+                val totalTasks = analyticsTaskCounterEngine.deriveTotalTasks(
+                    completedTasks = completedTasks,
+                    pendingTasks = pendingTasks
                 )
 
                 // Preserve existing calendar events, permissions, daily quote,
@@ -125,11 +135,11 @@ class AnalyticsViewModel(
                     )
 
                 AnalyticsUiState(
-                    userName = snapshot.userName,
-                    level = snapshot.level,
-                    xp = snapshot.xp,
-                    dailyStreak = snapshot.dailyStreak,
-                    totalTasksCompleted = snapshot.totalTasksCompleted,
+                    userName = userSummary.userName,
+                    level = userSummary.level,
+                    xp = userSummary.xp,
+                    dailyStreak = userSummary.dailyStreak,
+                    totalTasksCompleted = totalTasks,
                     totalCalendarEvents = current.totalDeviceCalendarEvents,
                     dailyCompletions = snapshot.dailyCompletions,
                     monthlyTaskStatus = snapshot.monthlyTaskStatus,
@@ -186,9 +196,13 @@ class AnalyticsViewModel(
             analyticsDeviceCalendarEngine
                 .observeTotalEventCount(_hasCalendarPermission)
                 .collect { count ->
+                    val totalCalendarEvents =
+                        analyticsCalendarCounterEngine.deriveTotalCalendarEvents(
+                            totalDeviceCalendarEvents = count
+                        )
                     _uiState.value = _uiState.value.copy(
                         totalDeviceCalendarEvents = count,
-                        totalCalendarEvents = count
+                        totalCalendarEvents = totalCalendarEvents
                     )
                 }
         }
@@ -286,7 +300,7 @@ class AnalyticsViewModel(
 
         val userWithStreak = updateStreak(resetUser, todayEpochDay)
 
-        val difficulty = TaskDifficulty.valueOf(task.difficulty)
+        val difficulty = TaskDifficulty.fromStorageValue(task.difficulty)
         val baseXp = difficulty.xpValue
 
         val completedToday = userWithStreak.tasksCompletedToday

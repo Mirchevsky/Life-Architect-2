@@ -6,11 +6,9 @@ import android.content.Intent
 import android.content.SharedPreferences
 import android.provider.CalendarContract
 import android.provider.CalendarContract.Events
-import com.mirchevsky.lifearchitect2.widget.TaskWidgetProvider
-import com.mirchevsky.lifearchitect2.R
-import java.time.Instant
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.mirchevsky.lifearchitect2.R
 import com.mirchevsky.lifearchitect2.data.AppRepository
 import com.mirchevsky.lifearchitect2.data.Theme
 import com.mirchevsky.lifearchitect2.data.TrendsRepository
@@ -18,8 +16,12 @@ import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
 import com.mirchevsky.lifearchitect2.data.db.entity.UserEntity
 import com.mirchevsky.lifearchitect2.domain.TaskDifficulty
 import com.mirchevsky.lifearchitect2.domain.TrendItem
-import com.mirchevsky.lifearchitect2.ui.viewmodel.MainUiState
-import com.mirchevsky.lifearchitect2.ui.viewmodel.TrendsUiState
+import com.mirchevsky.lifearchitect2.widget.TaskWidgetProvider
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import kotlin.math.pow
+import kotlin.random.Random
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,10 +29,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import java.time.LocalDateTime
-import java.time.ZoneId
-import kotlin.math.pow
-import kotlin.random.Random
 
 // ---------------------------------------------------------------------------
 // XP System Constants
@@ -59,15 +57,12 @@ private const val WEEKLY_STREAK_XP = 500
 private const val MONTHLY_MILESTONE_XP = 2500
 private const val MONTHLY_MILESTONE_STREAK = 30
 
-// ---------------------------------------------------------------------------
-// UI State
-// ---------------------------------------------------------------------------
-
-
-
-// ---------------------------------------------------------------------------
-// ViewModel
-// ---------------------------------------------------------------------------
+data class TrendsUiState(
+    val trends: List<TrendItem> = emptyList(),
+    val isLoading: Boolean = false,
+    val error: String? = null,
+    val selectedCountry: String? = null
+)
 
 /**
  * The primary ViewModel for the Life Architect app.
@@ -84,13 +79,6 @@ private const val MONTHLY_MILESTONE_STREAK = 30
  * @param trendsRepository The [TrendsRepository] for fetching Google Trends data.
  * @param appContext The application [Context], used for launching calendar intents.
  */
-data class TrendsUiState(
-    val trends: List<TrendItem> = emptyList(),
-    val isLoading: Boolean = false,
-    val error: String? = null,
-    val selectedCountry: String? = null
-)
-
 class MainViewModel(
     val repository: AppRepository,
     private val trendsRepository: TrendsRepository,
@@ -129,9 +117,12 @@ class MainViewModel(
                     level = level,
                     rankTitle = getRankTitle(level),
                     xpToNextLevel = xpNeededForNextLevel,
-                    currentLevelProgress = if (totalXpForThisLevel > 0)
-                        (xpInCurrentLevel.toFloat() / totalXpForThisLevel.toFloat()).coerceIn(0f, 1f)
-                    else 0f,
+                    currentLevelProgress = if (totalXpForThisLevel > 0) {
+                        (xpInCurrentLevel.toFloat() / totalXpForThisLevel.toFloat())
+                            .coerceIn(0f, 1f)
+                    } else {
+                        0f
+                    },
                     themePreference = Theme.valueOf(user?.themePreference ?: Theme.SYSTEM.name),
                     xpPopupVisible = _uiState.value.xpPopupVisible,
                     xpPopupAmount = _uiState.value.xpPopupAmount,
@@ -147,9 +138,9 @@ class MainViewModel(
         loadTrends(savedCountry)
     }
 
-    // ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
     // Task Actions
-    // ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
 
     /**
      * Marks a task as completed and awards XP to the user.
@@ -169,21 +160,23 @@ class MainViewModel(
         // 1. Reset daily counter if it's a new day
         val resetUser = if (user.todayResetDay < todayEpochDay) {
             user.copy(tasksCompletedToday = 0, todayResetDay = todayEpochDay)
-        } else user
+        } else {
+            user
+        }
 
         // 2. Update streak
         val userWithStreak = updateStreak(resetUser, todayEpochDay)
 
         // 3. Base XP from difficulty
-        val difficulty = TaskDifficulty.valueOf(task.difficulty)
+        val difficulty = TaskDifficulty.fromStorageValue(task.difficulty)
         val baseXp = difficulty.xpValue
 
         // 4. Diminishing returns tier
         val completedToday = userWithStreak.tasksCompletedToday
         val tieredXp = when {
-            completedToday < FULL_XP_THRESHOLD  -> baseXp
-            completedToday < HALF_XP_THRESHOLD  -> (baseXp * HALF_XP_MULTIPLIER).toInt()
-            else                                -> (baseXp * GRIND_XP_MULTIPLIER).toInt()
+            completedToday < FULL_XP_THRESHOLD -> baseXp
+            completedToday < HALF_XP_THRESHOLD -> (baseXp * HALF_XP_MULTIPLIER).toInt()
+            else -> (baseXp * GRIND_XP_MULTIPLIER).toInt()
         }
 
         // 5. Repetition penalty
@@ -192,34 +185,42 @@ class MainViewModel(
             .filter { it.completedAt != null && (now - it.completedAt) < 86_400_000L }
             .map { it.title.trim().lowercase() }
         val isRepeat = task.title.trim().lowercase() in recentTitles
-        val afterRepeatXp = if (isRepeat) (tieredXp * REPETITION_PENALTY).toInt() else tieredXp
+        val afterRepeatXp = if (isRepeat) {
+            (tieredXp * REPETITION_PENALTY).toInt()
+        } else {
+            tieredXp
+        }
 
         // 6. Velocity damping
         recentCompletionTimestamps.addLast(now)
         if (recentCompletionTimestamps.size > 5) recentCompletionTimestamps.removeFirst()
         val batchCount = recentCompletionTimestamps.count { (now - it) < 10_000L }
         val velocityMultiplier = when ((batchCount - 1).coerceAtLeast(0)) {
-            0    -> 1.00f
-            1    -> 0.90f
-            2    -> 0.80f
-            3    -> 0.70f
+            0 -> 1.00f
+            1 -> 0.90f
+            2 -> 0.80f
+            3 -> 0.70f
             else -> 0.60f
         }
         val afterVelocityXp = (afterRepeatXp * velocityMultiplier).toInt()
 
         // 7. Streak bonus on first STREAK_BONUS_TASK_COUNT tasks of the day
-        val streakBonusEligible = userWithStreak.dailyStreak >= 2 &&
-                completedToday < STREAK_BONUS_TASK_COUNT
+        val streakBonusEligible =
+            userWithStreak.dailyStreak >= 2 && completedToday < STREAK_BONUS_TASK_COUNT
         val afterStreakXp = if (streakBonusEligible) {
             (afterVelocityXp * STREAK_BONUS_MULTIPLIER).toInt()
-        } else afterVelocityXp
+        } else {
+            afterVelocityXp
+        }
 
         // 8. Critical hit (disabled on repeat tasks)
         val isXpCritical = !isRepeat && Random.nextFloat() < 0.20f
         val finalXp = if (isXpCritical) {
             val multiplier = 1.5f + Random.nextFloat() * 1.5f
             (afterStreakXp * multiplier).toInt()
-        } else afterStreakXp
+        } else {
+            afterStreakXp
+        }
 
         // 9. Increment counters
         var finalUser = checkLevelUp(
@@ -280,7 +281,7 @@ class MainViewModel(
         val user = repository.getUserOnce()
             ?: UserEntity(googleId = "local_user").also { repository.upsertUser(it) }
 
-        val difficulty = TaskDifficulty.valueOf(task.difficulty)
+        val difficulty = TaskDifficulty.fromStorageValue(task.difficulty)
         val xpLost = difficulty.xpValue
         val updatedUser = user.copy(
             xp = (user.xp - xpLost).coerceAtLeast(0),
@@ -312,23 +313,27 @@ class MainViewModel(
      * @param difficulty The difficulty string matching a [TaskDifficulty] enum name.
      * @param dueDate The optional due date parsed from the task title or selected via the date picker.
      */
-    fun onAddTask(title: String, difficulty: String, dueDate: LocalDateTime? = null) =
-        viewModelScope.launch {
-            val user = repository.getUserOnce()
-                ?: UserEntity(googleId = "local_user").also { repository.upsertUser(it) }
-            val dueDateMillis = dueDate
-                ?.atZone(ZoneId.systemDefault())
-                ?.toInstant()
-                ?.toEpochMilli()
-            val newTask = TaskEntity(
-                title = title,
-                difficulty = difficulty,
-                userId = user.googleId,
-                dueDate = dueDateMillis
-            )
-            repository.insertTask(newTask)
-            notifyWidget()
-        }
+    fun onAddTask(
+        title: String,
+        difficulty: String,
+        dueDate: LocalDateTime? = null
+    ) = viewModelScope.launch {
+        val user = repository.getUserOnce()
+            ?: UserEntity(googleId = "local_user").also { repository.upsertUser(it) }
+        val dueDateMillis = dueDate
+            ?.atZone(ZoneId.systemDefault())
+            ?.toInstant()
+            ?.toEpochMilli()
+
+        val newTask = TaskEntity(
+            title = title,
+            difficulty = difficulty,
+            userId = user.googleId,
+            dueDate = dueDateMillis
+        )
+        repository.insertTask(newTask)
+        notifyWidget()
+    }
 
     /**
      * Persists any change to a task (pin, urgent, title edit).
@@ -342,16 +347,16 @@ class MainViewModel(
      * Updates the task's due date and syncs the change to the device calendar.
      *
      * Strategy:
-     * - If the **date** (day) changed → delete the old calendar event (matched by
-     *   title + begin time) and insert a brand-new one on the new date.
-     * - If only the **time** changed → update the existing event in-place via
-     *   [ContentResolver.update] with a WHERE clause on title + old begin time.
+     * - If the date (day) changed → delete the old calendar event matched by
+     *   title + begin time and insert a brand-new one on the new date.
+     * - If only the time changed → update the existing event in-place via
+     *   ContentResolver.update with a WHERE clause on title + old begin time.
      *
      * Because we do not store the calendar event ID in the database, both paths
      * use a title + begin-time query to locate the existing event.
      *
-     * @param task      The task entity before the change.
-     * @param oldMillis The previous due-date epoch millis (may be null if no date was set).
+     * @param task The task entity before the change.
+     * @param oldMillis The previous due-date epoch millis.
      * @param newMillis The new due-date epoch millis chosen by the user.
      */
     fun onUpdateTaskDueDate(task: TaskEntity, oldMillis: Long?, newMillis: Long) =
@@ -366,7 +371,8 @@ class MainViewModel(
                 Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDate()
             }
             val newDay = Instant.ofEpochMilli(newMillis)
-                .atZone(ZoneId.systemDefault()).toLocalDate()
+                .atZone(ZoneId.systemDefault())
+                .toLocalDate()
             val dayChanged = oldDay != newDay
 
             if (oldMillis != null) {
@@ -377,6 +383,7 @@ class MainViewModel(
                         "${Events.TITLE} = ? AND ${Events.DTSTART} = ?",
                         arrayOf(task.title, oldMillis.toString())
                     )
+
                     // Insert a new event on the new date
                     val values = ContentValues().apply {
                         put(Events.TITLE, task.title)
@@ -414,15 +421,7 @@ class MainViewModel(
 
     /**
      * Triggers a full widget rebuild by sending [TaskWidgetProvider.ACTION_WIDGET_REFRESH]
-     * as a broadcast. [TaskWidgetProvider.onReceive] handles the broadcast by querying
-     * Room on [kotlinx.coroutines.Dispatchers.IO] and pushing a fresh [android.widget.RemoteViews]
-     * — including a new [android.widget.RemoteViews.RemoteCollectionItems] for the task list —
-     * via [android.appwidget.AppWidgetManager.updateAppWidget].
-     *
-     * This replaces the deprecated [android.appwidget.AppWidgetManager.notifyAppWidgetViewDataChanged]
-     * call that was used in the old [android.widget.RemoteViewsService] pattern.
-     *
-     * Called after every task mutation (add, update, complete, revert).
+     * as a broadcast.
      */
     private fun notifyWidget() {
         TaskWidgetProvider.sendRefreshBroadcast(appContext)
@@ -442,9 +441,9 @@ class MainViewModel(
         repository.updateUserTheme(theme)
     }
 
-    // ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
     // Trends Actions
-    // ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
 
     fun loadTrends(countryCode: String?) = viewModelScope.launch {
         _trendsUiState.update { it.copy(isLoading = true, error = null) }
@@ -467,9 +466,9 @@ class MainViewModel(
         loadTrends(countryCode)
     }
 
-    // ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
     // XP Popup
-    // ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
 
     private fun showXpPopup(amount: Int, isCritical: Boolean) {
         _uiState.update {
@@ -485,19 +484,24 @@ class MainViewModel(
         _uiState.update { it.copy(xpPopupVisible = false) }
     }
 
-    // ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
     // Private XP Helpers
-    // ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
 
     private fun updateStreak(user: UserEntity, todayEpochDay: Long): UserEntity {
         val yesterday = todayEpochDay - 1
         return when (user.lastCompletionDay) {
-            todayEpochDay -> user // Already updated today
+            todayEpochDay -> user
             yesterday -> user.copy(
                 dailyStreak = user.dailyStreak + 1,
                 lastCompletionDay = todayEpochDay,
-                weeklyStreakClaimed = if (user.dailyStreak + 1 < 7) false else user.weeklyStreakClaimed
+                weeklyStreakClaimed = if (user.dailyStreak + 1 < 7) {
+                    false
+                } else {
+                    user.weeklyStreakClaimed
+                }
             )
+
             else -> user.copy(
                 dailyStreak = 1,
                 lastCompletionDay = todayEpochDay,
@@ -509,13 +513,22 @@ class MainViewModel(
 
     private fun checkWeeklyStreakPayout(user: UserEntity): Int {
         val isNewWeekMultiple = user.dailyStreak > 0 && user.dailyStreak % 7 == 0
-        return if (isNewWeekMultiple && !user.weeklyStreakClaimed) WEEKLY_STREAK_XP else 0
+        return if (isNewWeekMultiple && !user.weeklyStreakClaimed) {
+            WEEKLY_STREAK_XP
+        } else {
+            0
+        }
     }
 
     private fun checkMonthlyMilestone(user: UserEntity): Int {
-        return if (user.dailyStreak >= MONTHLY_MILESTONE_STREAK && !user.monthlyMilestoneClaimed) {
+        return if (
+            user.dailyStreak >= MONTHLY_MILESTONE_STREAK &&
+            !user.monthlyMilestoneClaimed
+        ) {
             MONTHLY_MILESTONE_XP
-        } else 0
+        } else {
+            0
+        }
     }
 
     private fun checkLevelUp(user: UserEntity): UserEntity {
@@ -529,9 +542,9 @@ class MainViewModel(
         return current
     }
 
-    // ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
     // Rank & Level Helpers
-    // ---------------------------------------------------------------------------
+    // -----------------------------------------------------------------------
 
     private fun getXpNeededForLevel(level: Int): Int {
         if (level <= 0) return 0
@@ -539,14 +552,14 @@ class MainViewModel(
     }
 
     private fun getRankTitle(level: Int): String = when (level) {
-        in 1..4   -> "Novice"
-        in 5..9   -> "Apprentice"
+        in 1..4 -> "Novice"
+        in 5..9 -> "Apprentice"
         in 10..14 -> "Journeyman"
         in 15..19 -> "Adept"
         in 20..24 -> "Expert"
         in 25..29 -> "Master"
         in 30..39 -> "Grandmaster"
         in 40..49 -> "Legend"
-        else      -> "Mythic"
+        else -> "Mythic"
     }
 }
