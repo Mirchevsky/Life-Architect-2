@@ -13,24 +13,22 @@ import com.mirchevsky.lifearchitect2.data.DailyQuoteEngine
 import com.mirchevsky.lifearchitect2.data.DeviceCalendarRepository
 import com.mirchevsky.lifearchitect2.data.GlobalEvent
 import com.mirchevsky.lifearchitect2.data.GlobalEventsEngine
+import com.mirchevsky.lifearchitect2.data.analytics.AnalyticsCalendarEventFilterEngine
+import com.mirchevsky.lifearchitect2.data.analytics.AnalyticsCalendarTaskEngine
+import com.mirchevsky.lifearchitect2.data.analytics.AnalyticsDeviceCalendarEngine
+import com.mirchevsky.lifearchitect2.data.analytics.AnalyticsDeviceCalendarEngine.UpdateRequest
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
 import com.mirchevsky.lifearchitect2.data.db.entity.UserEntity
 import com.mirchevsky.lifearchitect2.domain.TaskDifficulty
 import java.time.Instant
 import java.time.LocalDate
 import java.time.YearMonth
-import java.time.ZoneId
-import java.time.temporal.WeekFields
-import java.util.Locale
 import kotlin.math.pow
 import kotlin.random.Random
-import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.launch
 
 enum class DayStatus {
@@ -73,7 +71,6 @@ data class AnalyticsUiState(
     val isLoading: Boolean = true
 )
 
-@OptIn(ExperimentalCoroutinesApi::class)
 class AnalyticsViewModel(
     private val repository: AppRepository,
     private val appContext: Context
@@ -90,7 +87,10 @@ class AnalyticsViewModel(
     private val _hasCalendarPermission = MutableStateFlow(checkCalendarReadPermission())
     private val _hasCalendarWritePermission = MutableStateFlow(checkCalendarWritePermission())
 
-    private val deviceCalendarRepo = DeviceCalendarRepository(appContext)
+    private val analyticsTaskEngine = AnalyticsCalendarTaskEngine()
+    private val analyticsCalendarFilterEngine = AnalyticsCalendarEventFilterEngine()
+    private val analyticsDeviceCalendarEngine =
+        AnalyticsDeviceCalendarEngine(DeviceCalendarRepository(appContext))
     private val dailyQuoteEngine = DailyQuoteEngine(appContext)
     private val globalEventsEngine = GlobalEventsEngine()
 
@@ -108,127 +108,37 @@ class AnalyticsViewModel(
             ) { user, completedTasks, pendingTasks, selectedDay ->
                 if (user == null) return@combine AnalyticsUiState(isLoading = false)
 
-                val zone = ZoneId.systemDefault()
-                val now = LocalDate.now()
-                val weekFields = WeekFields.of(Locale.getDefault())
-
-                val tasksByDate = completedTasks
-                    .filter { it.completedAt != null }
-                    .groupBy { task ->
-                        Instant.ofEpochMilli(task.completedAt!!)
-                            .atZone(zone)
-                            .toLocalDate()
-                    }
-
-                val dailyCompletions = (0..29).associate { offset ->
-                    val day = now.minusDays(offset.toLong())
-                    day to (tasksByDate[day]?.size ?: 0)
-                }
-
-                val bestDay = tasksByDate
-                    .maxByOrNull { it.value.size }
-                    ?.let { it.key to it.value.size }
-
-                val weeklyCompletions = completedTasks
-                    .filter { it.completedAt != null }
-                    .groupBy { task ->
-                        val date = Instant.ofEpochMilli(task.completedAt!!)
-                            .atZone(zone)
-                            .toLocalDate()
-                        date.with(weekFields.dayOfWeek(), 1)
-                    }
-
-                val bestWeek = weeklyCompletions
-                    .maxByOrNull { it.value.size }
-                    ?.let { it.key to it.value.size }
-
-                val onTime = completedTasks.count {
-                    it.dueDate != null &&
-                            it.completedAt != null &&
-                            it.completedAt <= it.dueDate
-                }
-
-                val overdue = completedTasks.count {
-                    it.dueDate != null &&
-                            it.completedAt != null &&
-                            it.completedAt > it.dueDate
-                }
-
-                val completedDays = completedTasks
-                    .filter { it.dueDate != null }
-                    .map { Instant.ofEpochMilli(it.dueDate!!).atZone(zone).toLocalDate() }
-                    .toSet()
-
-                val pendingDays = pendingTasks
-                    .filter { it.dueDate != null }
-                    .map { Instant.ofEpochMilli(it.dueDate!!).atZone(zone).toLocalDate() }
-                    .toSet()
-
-                val totalCalendarEvents =
-                    completedTasks.count { it.dueDate != null } +
-                            pendingTasks.count { it.dueDate != null }
-
-                val allDays = completedDays + pendingDays
-
-                val monthlyStatus = allDays.associateWith { date ->
-                    val hasCompleted = completedDays.contains(date)
-                    val hasPending = pendingDays.contains(date)
-                    when {
-                        hasCompleted && hasPending -> DayStatus.BOTH
-                        hasCompleted -> DayStatus.COMPLETED
-                        else -> DayStatus.PENDING
-                    }
-                }
-
-                val resolvedDay = if (allDays.contains(selectedDay)) {
-                    selectedDay
-                } else if (selectedDay == now) {
-                    allDays.filter { it >= now }.minOrNull()
-                        ?: allDays.maxOrNull()
-                        ?: selectedDay
-                } else {
-                    selectedDay
-                }
-
-                val pendingForDay = pendingTasks.filter { task ->
-                    task.dueDate != null &&
-                            Instant.ofEpochMilli(task.dueDate)
-                                .atZone(zone)
-                                .toLocalDate() == resolvedDay
-                }
-
-                val completedForDay = completedTasks.filter { task ->
-                    task.dueDate != null &&
-                            Instant.ofEpochMilli(task.dueDate!!)
-                                .atZone(zone)
-                                .toLocalDate() == resolvedDay
-                }
-
-                val tasksForDay = pendingForDay + completedForDay
+                val snapshot = analyticsTaskEngine.buildSnapshot(
+                    user = user,
+                    completedTasks = completedTasks,
+                    pendingTasks = pendingTasks,
+                    selectedDay = selectedDay
+                )
 
                 // Preserve existing calendar events, permissions, daily quote,
                 // and global event state while task state updates.
                 val current = _uiState.value
-                val filteredCalendarEvents = filterTaskMirroredCalendarEvents(
-                    events = current.calendarEventsForSelectedDay,
-                    tasksForDay = tasksForDay
-                )
+                val filteredCalendarEvents =
+                    analyticsCalendarFilterEngine.filterTaskMirroredCalendarEvents(
+                        events = current.calendarEventsForSelectedDay,
+                        tasksForDay = snapshot.tasksForSelectedDay
+                    )
 
                 AnalyticsUiState(
-                    userName = user.name,
-                    level = user.level,
-                    xp = user.xp,
-                    dailyStreak = user.dailyStreak,
-                    totalTasksCompleted = completedTasks.size + pendingTasks.size,
+                    userName = snapshot.userName,
+                    level = snapshot.level,
+                    xp = snapshot.xp,
+                    dailyStreak = snapshot.dailyStreak,
+                    totalTasksCompleted = snapshot.totalTasksCompleted,
                     totalCalendarEvents = current.totalDeviceCalendarEvents,
-                    dailyCompletions = dailyCompletions,
-                    monthlyTaskStatus = monthlyStatus,
-                    onTimeCompletions = onTime,
-                    overdueCompletions = overdue,
-                    bestDay = bestDay,
-                    bestWeek = bestWeek,
-                    selectedDay = resolvedDay,
-                    tasksForSelectedDay = tasksForDay,
+                    dailyCompletions = snapshot.dailyCompletions,
+                    monthlyTaskStatus = snapshot.monthlyTaskStatus,
+                    onTimeCompletions = snapshot.onTimeCompletions,
+                    overdueCompletions = snapshot.overdueCompletions,
+                    bestDay = snapshot.bestDay,
+                    bestWeek = snapshot.bestWeek,
+                    selectedDay = snapshot.selectedDay,
+                    tasksForSelectedDay = snapshot.tasksForSelectedDay,
                     calendarEventsForSelectedDay = filteredCalendarEvents,
                     calendarEventDays = current.calendarEventDays,
                     totalDeviceCalendarEvents = current.totalDeviceCalendarEvents,
@@ -246,46 +156,41 @@ class AnalyticsViewModel(
 
         // ── Device calendar events for selected day ──────────────────────────
         viewModelScope.launch {
-            combine(_selectedDay, _hasCalendarPermission) { day, hasPerm ->
-                day to hasPerm
-            }.flatMapLatest { (day, hasPerm) ->
-                if (hasPerm) deviceCalendarRepo.observeEventsForDate(day) else flowOf(emptyList())
-            }.collect { events ->
-                val current = _uiState.value
-                _uiState.value = _uiState.value.copy(
-                    calendarEventsForSelectedDay = filterTaskMirroredCalendarEvents(
-                        events = events,
-                        tasksForDay = current.tasksForSelectedDay
-                    ),
-                    hasCalendarPermission = _hasCalendarPermission.value,
-                    hasCalendarWritePermission = _hasCalendarWritePermission.value
-                )
-            }
+            analyticsDeviceCalendarEngine
+                .observeEventsForSelectedDay(_selectedDay, _hasCalendarPermission)
+                .collect { events ->
+                    val current = _uiState.value
+                    _uiState.value = _uiState.value.copy(
+                        calendarEventsForSelectedDay =
+                            analyticsCalendarFilterEngine.filterTaskMirroredCalendarEvents(
+                                events = events,
+                                tasksForDay = current.tasksForSelectedDay
+                            ),
+                        hasCalendarPermission = _hasCalendarPermission.value,
+                        hasCalendarWritePermission = _hasCalendarWritePermission.value
+                    )
+                }
         }
 
         // ── Calendar event days for month grid dots ───────────────────────────
         viewModelScope.launch {
-            _hasCalendarPermission.flatMapLatest { hasPerm ->
-                if (hasPerm) {
-                    deviceCalendarRepo.observeEventDaysForMonth(YearMonth.now())
-                } else {
-                    flowOf(emptySet())
+            analyticsDeviceCalendarEngine
+                .observeEventDaysForMonth(YearMonth.now(), _hasCalendarPermission)
+                .collect { days ->
+                    _uiState.value = _uiState.value.copy(calendarEventDays = days)
                 }
-            }.collect { days ->
-                _uiState.value = _uiState.value.copy(calendarEventDays = days)
-            }
         }
 
         // ── Total device calendar event count ────────────────────────────────
         viewModelScope.launch {
-            _hasCalendarPermission.flatMapLatest { hasPerm ->
-                if (hasPerm) deviceCalendarRepo.observeTotalEventCount() else flowOf(0)
-            }.collect { count ->
-                _uiState.value = _uiState.value.copy(
-                    totalDeviceCalendarEvents = count,
-                    totalCalendarEvents = count
-                )
-            }
+            analyticsDeviceCalendarEngine
+                .observeTotalEventCount(_hasCalendarPermission)
+                .collect { count ->
+                    _uiState.value = _uiState.value.copy(
+                        totalDeviceCalendarEvents = count,
+                        totalCalendarEvents = count
+                    )
+                }
         }
     }
 
@@ -348,9 +253,9 @@ class AnalyticsViewModel(
     ) = viewModelScope.launch {
         if (!_hasCalendarPermission.value || !_hasCalendarWritePermission.value) return@launch
 
-        deviceCalendarRepo.updateEvent(
-            eventId,
-            DeviceCalendarRepository.EventUpdate(
+        analyticsDeviceCalendarEngine.updateEvent(
+            UpdateRequest(
+                eventId = eventId,
                 title = title,
                 startMillis = startMillis,
                 endMillis = endMillis,
@@ -361,7 +266,7 @@ class AnalyticsViewModel(
 
     fun deleteCalendarEvent(eventId: Long) = viewModelScope.launch {
         if (!_hasCalendarPermission.value || !_hasCalendarWritePermission.value) return@launch
-        deviceCalendarRepo.deleteEvent(eventId)
+        analyticsDeviceCalendarEngine.deleteEvent(eventId)
     }
 
     /** Complete a task from the Analytics screen — full XP logic identical to MainViewModel. */
@@ -521,23 +426,5 @@ class AnalyticsViewModel(
     private fun getXpNeededForLevel(level: Int): Int {
         if (level <= 0) return 0
         return (100 * level.toDouble().pow(1.5)).toInt()
-    }
-
-    private fun filterTaskMirroredCalendarEvents(
-        events: List<CalendarEvent>,
-        tasksForDay: List<TaskEntity>
-    ): List<CalendarEvent> {
-        if (events.isEmpty() || tasksForDay.isEmpty()) return events
-
-        val normalizedTaskTitles = tasksForDay
-            .map { it.title.trim().lowercase() }
-            .filter { it.isNotBlank() }
-            .toSet()
-
-        if (normalizedTaskTitles.isEmpty()) return events
-
-        return events.filterNot { event ->
-            event.title.trim().lowercase() in normalizedTaskTitles
-        }
     }
 }
