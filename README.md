@@ -17,7 +17,7 @@ The application is in active development. The current feature set provides the c
 
 | Feature | Status | Description |
 | --- | --- | --- |
-| **Task Management** | ✅ Complete | Create, track, and complete tasks ("quests"). |
+| **Task Management** | ✅ Complete | Create, track, and complete tasks. |
 | **Gamification Engine** | ✅ Complete | Earn XP for completing tasks. |
 | **Leveling System** | ✅ Complete | Progress through ranks. |
 | **MVI Architecture** | ✅ Complete | A scalable and testable Model-View-Intent architecture. |
