@@ -55,11 +55,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.LocalTextSelectionColors
-import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
@@ -79,7 +76,6 @@ import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -91,16 +87,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.colorResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -108,14 +100,15 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.LifecycleRegistry
+import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.SavedStateRegistry
 import androidx.savedstate.SavedStateRegistryController
 import androidx.savedstate.SavedStateRegistryOwner
-import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import com.mirchevsky.lifearchitect2.R
 import com.mirchevsky.lifearchitect2.data.db.AppDatabase
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
+import com.mirchevsky.lifearchitect2.ui.composables.TimeInputFields
 import com.mirchevsky.lifearchitect2.ui.theme.AppTheme
 import com.mirchevsky.lifearchitect2.ui.theme.BrandGreen
 import com.mirchevsky.lifearchitect2.ui.theme.Purple
@@ -448,6 +441,24 @@ class WidgetOverlayService : Service() {
             Color.White
         } else {
             colorResource(id = R.color.widget_item_card)
+        }
+    }
+
+    @Composable
+    private fun overlayTimeFieldBackgroundColor(): Color {
+        return if (isSystemInDarkTheme()) {
+            MaterialTheme.colorScheme.surfaceVariant
+        } else {
+            colorResource(id = R.color.white)
+        }
+    }
+
+    @Composable
+    private fun overlayTimeFieldContentColor(): Color {
+        return if (isSystemInDarkTheme()) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            colorResource(id = R.color.widget_text_primary)
         }
     }
 
@@ -842,78 +853,15 @@ class WidgetOverlayService : Service() {
 
     @Composable
     private fun TimeInputCustom(state: EventState) {
-        val timeFieldBackground = colorResource(id = R.color.white)
-        val timeFieldContent = colorResource(id = R.color.widget_text_primary)
-
-        val customTextSelectionColors = TextSelectionColors(
-            handleColor = timeFieldContent,
-            backgroundColor = timeFieldContent.copy(alpha = 0.28f)
+        TimeInputFields(
+            hour = state.hour,
+            minute = state.minute,
+            onHourChange = { state.hour = it },
+            onMinuteChange = { state.minute = it },
+            fieldBackground = overlayTimeFieldBackgroundColor(),
+            fieldContent = overlayTimeFieldContentColor(),
+            modifier = Modifier.fillMaxWidth()
         )
-
-        CompositionLocalProvider(
-            LocalTextSelectionColors provides customTextSelectionColors
-        ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Center,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                BasicTextField(
-                    value = state.hour.toString().padStart(2, '0'),
-                    onValueChange = { value ->
-                        state.hour = value
-                            .filter { it.isDigit() }
-                            .take(2)
-                            .toIntOrNull() ?: 0
-                    },
-                    textStyle = TextStyle(
-                        color = timeFieldContent,
-                        fontSize = 48.sp,
-                        textAlign = TextAlign.Center
-                    ),
-                    modifier = Modifier
-                        .width(110.dp)
-                        .height(80.dp)
-                        .background(timeFieldBackground, RoundedCornerShape(12.dp))
-                        .padding(8.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    cursorBrush = SolidColor(timeFieldContent)
-                )
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                Text(
-                    text = ":",
-                    color = timeFieldContent,
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                BasicTextField(
-                    value = state.minute.toString().padStart(2, '0'),
-                    onValueChange = { value ->
-                        state.minute = value
-                            .filter { it.isDigit() }
-                            .take(2)
-                            .toIntOrNull() ?: 0
-                    },
-                    textStyle = TextStyle(
-                        color = timeFieldContent,
-                        fontSize = 48.sp,
-                        textAlign = TextAlign.Center
-                    ),
-                    modifier = Modifier
-                        .width(110.dp)
-                        .height(80.dp)
-                        .background(timeFieldBackground, RoundedCornerShape(12.dp))
-                        .padding(8.dp),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                    cursorBrush = SolidColor(timeFieldContent)
-                )
-            }
-        }
     }
 
     @OptIn(ExperimentalMaterial3Api::class)

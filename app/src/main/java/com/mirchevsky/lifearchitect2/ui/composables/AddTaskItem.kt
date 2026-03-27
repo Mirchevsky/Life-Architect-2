@@ -41,8 +41,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.text.selection.LocalTextSelectionColors
-import androidx.compose.foundation.text.selection.TextSelectionColors
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarToday
@@ -68,7 +66,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -86,10 +83,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.colorResource
-import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -180,6 +175,7 @@ private fun inAppBackButtonContainerColor(): Color {
  * The inline add-task panel shown at the bottom of the Tasks screen.
  *
  * Design
+ *
  * A [Card] panel (matching [TaskItem]'s surfaceVariant style) containing:
  *
  * A borderless [BasicTextField] for the task title.
@@ -200,6 +196,7 @@ private fun inAppBackButtonContainerColor(): Color {
  * Add button (green): adds the task to the app only, no calendar event.
  *
  * Keyboard behaviour (WhatsApp-style)
+ *
  * The composable uses [Modifier.imePadding] so the entire card floats above the
  * software keyboard whenever the text field is focused — the action buttons are always
  * visible. [ImeAction.Done] on the keyboard simply clears focus (lowers the keyboard)
@@ -209,9 +206,7 @@ private fun inAppBackButtonContainerColor(): Color {
  *
  * @param onAddTask Called with the task title, difficulty string, and optional due
  * date when the user confirms via either button.
- *
  * @param requestFocus When true, the text field requests focus on first composition.
- *
  * @param onFocusConsumed Called once after the focus request fires so the caller
  * can reset the flag.
  */
@@ -229,8 +224,6 @@ fun AddTaskItem(
     val focusRequester = remember { FocusRequester() }
     val permissionPrefs = remember(context) { PermissionPrefs(context) }
 
-    // Permission gate states — re-resolved on each composition so they update
-    // immediately after the user returns from the system dialog.
     var micPermState by remember {
         mutableStateOf(
             resolvePermissionGateState(
@@ -250,7 +243,6 @@ fun AddTaskItem(
         )
     }
 
-    // In-app rationale / blocked dialogs
     var showMicRationale by remember { mutableStateOf(false) }
     var showMicBlocked by remember { mutableStateOf(false) }
     var showCalRationale by remember { mutableStateOf(false) }
@@ -259,20 +251,15 @@ fun AddTaskItem(
     var title by remember { mutableStateOf("") }
     var parseResult by remember { mutableStateOf<DateIntentParser.ParseResult?>(null) }
 
-    // Two-step picker state
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var pendingDateMillis by remember { mutableStateOf<Long?>(null) }
 
-    // Calendar confirmation popup
     var showCalendarPopup by remember { mutableStateOf(false) }
-
-    // Mic active state — true while SpeechRecognizer is listening
     var isMicActive by remember { mutableStateOf(false) }
 
     val titleFlow = remember { MutableStateFlow("") }
 
-    // ── SpeechRecognizer (direct API — no overlay, no privacy notice) ──────
     val speechRecognizer = remember { SpeechRecognizer.createSpeechRecognizer(context) }
 
     DisposableEffect(Unit) {
@@ -319,7 +306,6 @@ fun AddTaskItem(
             }
 
             override fun onPartialResults(partialResults: Bundle?) {
-                // Fill field in real-time as the user speaks
                 val partial = partialResults
                     ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
                     ?.firstOrNull()
@@ -334,7 +320,6 @@ fun AddTaskItem(
         }
     }
 
-    // ── Permission launchers (gate-aware) ────────────────────────────────────
     var pendingCalendarAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
     val calendarPermissionLauncher = rememberLauncherForActivityResult(
@@ -389,7 +374,6 @@ fun AddTaskItem(
         }
     }
 
-    // ── Focus request ──────────────────────────────────────────────────────
     LaunchedEffect(requestFocus) {
         if (requestFocus) {
             focusRequester.requestFocus()
@@ -397,7 +381,6 @@ fun AddTaskItem(
         }
     }
 
-    // ── Date parser (debounced) ────────────────────────────────────────────
     LaunchedEffect(Unit) {
         titleFlow
             .debounce(300)
@@ -408,7 +391,6 @@ fun AddTaskItem(
 
     val hasText = title.isNotBlank()
 
-    // ── Submit helpers ─────────────────────────────────────────────────────
     fun resetState() {
         title = ""
         titleFlow.value = ""
@@ -429,9 +411,12 @@ fun AddTaskItem(
      * (no app switch) and simultaneously adds the task to the app.
      *
      * Strategy:
-     * 1. Try to find the primary calendar (IS_PRIMARY = 1).
-     * 2. If not found, fall back to any available calendar.
-     * 3. If no calendar account exists at all, fall back to [Intent.ACTION_INSERT].
+     *
+     * Try to find the primary calendar (IS_PRIMARY = 1).
+     *
+     * If not found, fall back to any available calendar.
+     *
+     * If no calendar account exists at all, fall back to [Intent.ACTION_INSERT].
      */
     fun submitWithCalendar(dueDate: LocalDateTime) {
         if (!hasText) return
@@ -439,7 +424,6 @@ fun AddTaskItem(
         val epochMillis = dueDate.atZone(ZoneId.systemDefault()).toInstant().toEpochMilli()
         val projection = arrayOf(CalendarContract.Calendars._ID)
 
-        // Step 1: primary calendar
         val calendarId: Long? = try {
             context.contentResolver.query(
                 CalendarContract.Calendars.CONTENT_URI,
@@ -453,22 +437,20 @@ fun AddTaskItem(
         } catch (e: Exception) {
             Log.e(TAG, "Primary calendar query failed", e)
             null
-        }
-        // Step 2: any calendar
-            ?: try {
-                context.contentResolver.query(
-                    CalendarContract.Calendars.CONTENT_URI,
-                    projection,
-                    null,
-                    null,
-                    null
-                )?.use { c ->
-                    if (c.moveToFirst()) c.getLong(0) else null
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Any-calendar query failed", e)
+        } ?: try {
+            context.contentResolver.query(
+                CalendarContract.Calendars.CONTENT_URI,
+                projection,
+                null,
+                null,
                 null
+            )?.use { c ->
+                if (c.moveToFirst()) c.getLong(0) else null
             }
+        } catch (e: Exception) {
+            Log.e(TAG, "Any-calendar query failed", e)
+            null
+        }
 
         Log.d(TAG, "Calendar insert — calendarId=$calendarId, dueDate=$dueDate")
 
@@ -491,7 +473,6 @@ fun AddTaskItem(
             Log.d(TAG, "Calendar event inserted: uri=$uri")
             if (uri != null) showCalendarPopup = true
 
-            // Request an immediate sync so the event appears in Google Calendar without delay
             if (uri != null) {
                 try {
                     context.contentResolver.query(
@@ -522,7 +503,6 @@ fun AddTaskItem(
                 }
             }
         } else {
-            // Step 3: no calendar account — open external calendar app as fallback
             Log.w(TAG, "No calendar found, falling back to Intent.ACTION_INSERT")
             val intent = Intent(Intent.ACTION_INSERT).apply {
                 data = CalendarContract.Events.CONTENT_URI
@@ -539,7 +519,9 @@ fun AddTaskItem(
 
     /**
      * Starts the [SpeechRecognizer] directly — no system overlay, no privacy notice.
+     *
      * Uses the device's default language automatically (no EXTRA_LANGUAGE needed).
+     *
      * Requests [Manifest.permission.RECORD_AUDIO] on first use if not already granted.
      */
     fun startListening() {
@@ -549,7 +531,6 @@ fun AddTaskItem(
             return
         }
 
-        // Re-resolve state on every tap so it reflects any changes since last tap
         micPermState = resolvePermissionGateState(
             context,
             Manifest.permission.RECORD_AUDIO,
@@ -584,7 +565,6 @@ fun AddTaskItem(
     fun openCalendarPicker() {
         if (!hasText) return
 
-        // Re-resolve state on every tap
         calPermState = resolvePermissionGateState(
             context,
             Manifest.permission.WRITE_CALENDAR,
@@ -609,7 +589,6 @@ fun AddTaskItem(
         }
     }
 
-    // ── Card panel + popup overlay ────────────────────────────────────────
     Box {
         Card(
             modifier = modifier,
@@ -620,7 +599,6 @@ fun AddTaskItem(
             elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Column(modifier = Modifier.fillMaxWidth()) {
-                // ── Text input area ────────────────────────────────────────────
                 BasicTextField(
                     value = title,
                     onValueChange = {
@@ -636,8 +614,6 @@ fun AddTaskItem(
                         color = MaterialTheme.colorScheme.onSurface
                     ),
                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
-                    // ImeAction.Done shows the "✓" key; handler only clears focus
-                    // (lowers keyboard) — does NOT submit the task.
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(
                         onDone = { focusManager.clearFocus() }
@@ -654,13 +630,11 @@ fun AddTaskItem(
                     }
                 )
 
-                // ── Internal divider ───────────────────────────────────────────
                 HorizontalDivider(
                     color = MaterialTheme.colorScheme.outline.copy(alpha = 0.4f),
                     thickness = 0.5.dp
                 )
 
-                // ── Action row ─────────────────────────────────────────────────
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -670,7 +644,6 @@ fun AddTaskItem(
                 ) {
                     Spacer(modifier = Modifier.weight(1f))
 
-                    // Mic button — shows animated dots while listening, mic icon otherwise
                     FilledIconButton(
                         onClick = { startListening() },
                         modifier = Modifier.size(44.dp),
@@ -697,7 +670,6 @@ fun AddTaskItem(
                         }
                     }
 
-                    // Calendar button
                     FilledIconButton(
                         onClick = { openCalendarPicker() },
                         modifier = Modifier.size(44.dp),
@@ -715,7 +687,6 @@ fun AddTaskItem(
                         )
                     }
 
-                    // Add button
                     FilledIconButton(
                         onClick = { submitTaskOnly() },
                         modifier = Modifier.size(44.dp),
@@ -736,14 +707,10 @@ fun AddTaskItem(
             }
         }
 
-        // ── Calendar confirmation popup ────────────────────────────────────────
         if (showCalendarPopup) {
             CalendarConfirmPopup(onDismiss = { showCalendarPopup = false })
         }
     }
-
-    // ── Permission rationale dialogs ──────────────────────────────────────────
-    // Shown after the first denial to explain why the permission is needed.
 
     if (showMicRationale) {
         AlertDialog(
@@ -859,7 +826,6 @@ fun AddTaskItem(
         )
     }
 
-    // ── Date picker dialog (step 1 of 2) ──────────────────────────────────
     if (showDatePicker) {
         val initialMillis = parseResult?.bestGuess
             ?.atZone(ZoneId.systemDefault())
@@ -978,7 +944,6 @@ fun AddTaskItem(
         }
     }
 
-    // ── Time picker dialog (step 2 of 2) ──────────────────────────────────
     if (showTimePicker) {
         val parsedTime = parseResult?.bestGuess
         var isAllDay by remember { mutableStateOf(false) }
@@ -1004,7 +969,6 @@ fun AddTaskItem(
                         .padding(horizontal = 20.dp, vertical = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    // All-day toggle
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         verticalAlignment = Alignment.CenterVertically
@@ -1027,7 +991,6 @@ fun AddTaskItem(
                         )
                     }
 
-                    // Time input — hidden when all-day
                     AnimatedVisibility(visible = !isAllDay) {
                         Surface(
                             modifier = Modifier.fillMaxWidth(),
@@ -1043,82 +1006,22 @@ fun AddTaskItem(
                             ) {
                                 val timeFieldBackground = inAppTimeFieldBackgroundColor()
                                 val timeFieldContent = inAppTimeFieldContentColor()
-                                val customTextSelectionColors = TextSelectionColors(
-                                    handleColor = timeFieldContent,
-                                    backgroundColor = timeFieldContent.copy(alpha = 0.28f)
+
+                                TimeInputFields(
+                                    hour = hour,
+                                    minute = minute,
+                                    onHourChange = { hour = it },
+                                    onMinuteChange = { minute = it },
+                                    fieldBackground = timeFieldBackground,
+                                    fieldContent = timeFieldContent,
+                                    modifier = Modifier.fillMaxWidth()
                                 )
-
-                                CompositionLocalProvider(
-                                    LocalTextSelectionColors provides customTextSelectionColors
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.Center,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        BasicTextField(
-                                            value = hour.toString().padStart(2, '0'),
-                                            onValueChange = { v ->
-                                                hour = v.filter { it.isDigit() }
-                                                    .take(2)
-                                                    .toIntOrNull()
-                                                    ?.coerceIn(0, 23) ?: 0
-                                            },
-                                            textStyle = TextStyle(
-                                                color = timeFieldContent,
-                                                fontSize = 48.sp,
-                                                textAlign = TextAlign.Center
-                                            ),
-                                            modifier = Modifier
-                                                .width(110.dp)
-                                                .height(80.dp)
-                                                .background(timeFieldBackground, RoundedCornerShape(12.dp))
-                                                .padding(8.dp),
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                            cursorBrush = SolidColor(timeFieldContent)
-                                        )
-
-                                        Spacer(modifier = Modifier.width(10.dp))
-
-                                        Text(
-                                            text = ":",
-                                            color = timeFieldContent,
-                                            fontSize = 36.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-
-                                        Spacer(modifier = Modifier.width(10.dp))
-
-                                        BasicTextField(
-                                            value = minute.toString().padStart(2, '0'),
-                                            onValueChange = { v ->
-                                                minute = v.filter { it.isDigit() }
-                                                    .take(2)
-                                                    .toIntOrNull()
-                                                    ?.coerceIn(0, 59) ?: 0
-                                            },
-                                            textStyle = TextStyle(
-                                                color = timeFieldContent,
-                                                fontSize = 48.sp,
-                                                textAlign = TextAlign.Center
-                                            ),
-                                            modifier = Modifier
-                                                .width(110.dp)
-                                                .height(80.dp)
-                                                .background(timeFieldBackground, RoundedCornerShape(12.dp))
-                                                .padding(8.dp),
-                                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                            cursorBrush = SolidColor(timeFieldContent)
-                                        )
-                                    }
-                                }
                             }
                         }
                     }
 
                     Spacer(Modifier.height(if (isAllDay) 24.dp else 16.dp))
 
-                    // Bottom buttons
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -1199,11 +1102,10 @@ fun AddTaskItem(
 private fun RecordingDotsIndicator() {
     val infiniteTransition = rememberInfiniteTransition(label = "recordingDots")
 
-    // Three dots with staggered animation delays
     val offsets = listOf(0, 150, 300).map { delay ->
         infiniteTransition.animateFloat(
             initialValue = 0f,
-            targetValue = -4f, // 4 dp bounce — subtle, fits inside button
+            targetValue = -4f,
             animationSpec = infiniteRepeatable(
                 animation = tween(
                     durationMillis = 450,
@@ -1217,13 +1119,13 @@ private fun RecordingDotsIndicator() {
     }
 
     Row(
-        horizontalArrangement = Arrangement.spacedBy(4.dp), // tight spacing
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
         offsets.forEach { offset ->
             Box(
                 modifier = Modifier
-                    .size(4.dp) // 4 dp dot — matches icon weight
+                    .size(4.dp)
                     .offset(y = offset.value.dp)
                     .background(
                         color = Color.White.copy(alpha = 0.9f),
@@ -1267,7 +1169,7 @@ private fun CalendarConfirmPopup(onDismiss: () -> Unit) {
     ) {
         Text(
             text = "Added to Calendar",
-            color = Purple, // calendar purple — matches CalendarUpdatedPopup in TaskItem
+            color = Purple,
             fontSize = 22.sp,
             fontWeight = FontWeight.ExtraBold,
             textAlign = TextAlign.Center,
