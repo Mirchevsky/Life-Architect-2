@@ -5,18 +5,19 @@
     Single task row for the Life Architect 2 home screen widget.
 
     Layout (matches in-app TaskItem style):
-      ┌──────────────────────────────────────────────────────────────────┐
-      │  [ ]  Task title                                        🚩  📌   │
-      │       Feb 14, 09:30  🗓                                          │
-      └──────────────────────────────────────────────────────────────────┘
+
+    ┌──────────────────────────────────────────────────────────────────┐
+    │ [ ] Task title                                      🚩      📌 │
+    │     Feb 14, 09:30                                  🗓          │
+    └──────────────────────────────────────────────────────────────────┘
 
     The date row is hidden for tasks with no dueDate.
     The calendar icon is hidden for normal tasks; shown for events.
 
-    Place at: app/src/main/res/layout/widget_task_item.xml
+    Place at:
+    app/src/main/res/layout/widget_task_item.xml
 -->
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_item_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -50,7 +51,7 @@
             android:id="@+id/widget_item_title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textColor="@color/widget_text_primary"
+            android:textColor="@color/widget_accent_green"
             android:textSize="13sp"
             android:maxLines="1"
             android:ellipsize="end"
@@ -85,9 +86,7 @@
                 android:src="@drawable/widget_ic_calendar"
                 android:contentDescription="Calendar event"
                 android:visibility="gone" />
-
         </LinearLayout>
-
     </LinearLayout>
 
     <!-- Flag icon — always visible -->

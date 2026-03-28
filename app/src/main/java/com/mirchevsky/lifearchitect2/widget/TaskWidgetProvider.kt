@@ -7,6 +7,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Color
+import android.os.Handler
+import android.os.Looper
 import android.provider.Settings
 import android.view.View
 import android.widget.RemoteViews
@@ -25,6 +27,12 @@ class TaskWidgetProvider : AppWidgetProvider() {
     companion object {
         const val ACTION_WIDGET_REFRESH = "com.mirchevsky.lifearchitect2.WIDGET_REFRESH"
         const val ACTION_WIDGET_ROW_ACTION = "com.mirchevsky.lifearchitect2.WIDGET_ROW_ACTION"
+        private const val ACTION_GLOW_FADE = "com.mirchevsky.lifearchitect2.WIDGET_GLOW_FADE"
+        private const val GLOW_WINDOW_MS = 1800L
+        private const val GLOW_DEBOUNCE_MS = 4000L
+        private const val PREFS_WIDGET = "widget_glow_prefs"
+        private const val KEY_GLOW_UNTIL = "glow_until_ms"
+        private const val KEY_LAST_GLOW_TRIGGER = "last_glow_trigger_ms"
 
         const val EXTRA_TASK_ID = "task_id"
         const val EXTRA_ROW_ACTION = "row_action"
@@ -65,6 +73,23 @@ class TaskWidgetProvider : AppWidgetProvider() {
 
         when (intent.action) {
             ACTION_WIDGET_REFRESH -> {
+                val manager = AppWidgetManager.getInstance(context)
+                val ids = manager.getAppWidgetIds(
+                    ComponentName(context, TaskWidgetProvider::class.java)
+                )
+                ids.forEach { id -> pushWidgetAsync(context, manager, id) }
+            }
+
+            Intent.ACTION_SCREEN_ON, Intent.ACTION_USER_PRESENT -> {
+                triggerGlowForHomeExposure(context)
+                val manager = AppWidgetManager.getInstance(context)
+                val ids = manager.getAppWidgetIds(
+                    ComponentName(context, TaskWidgetProvider::class.java)
+                )
+                ids.forEach { id -> pushWidgetAsync(context, manager, id) }
+            }
+
+            ACTION_GLOW_FADE -> {
                 val manager = AppWidgetManager.getInstance(context)
                 val ids = manager.getAppWidgetIds(
                     ComponentName(context, TaskWidgetProvider::class.java)
@@ -227,14 +252,18 @@ class TaskWidgetProvider : AppWidgetProvider() {
 
         val rv = RemoteViews(context.packageName, layoutRes)
         val colorIconInactive = context.getColor(R.color.widget_icon_inactive)
+        val colorBrandGreen = context.getColor(R.color.widget_accent_green)
+        val isGlowActive = isGlowActive(context)
+        val titleColor = if (isGlowActive) blendTowardWhite(colorBrandGreen, 0.62f) else colorBrandGreen
 
         val safeTitle = BidiFormatter.getInstance().unicodeWrap(task.title)
         rv.setTextViewText(R.id.widget_item_title, safeTitle)
-
-        when {
-            task.isUrgent -> rv.setTextColor(R.id.widget_item_title, COLOR_URGENT)
-            task.isPinned -> rv.setTextColor(R.id.widget_item_title, COLOR_PINNED)
-        }
+        rv.setTextColor(R.id.widget_item_title, titleColor)
+        rv.setTextViewTextSize(
+            R.id.widget_item_title,
+            android.util.TypedValue.COMPLEX_UNIT_SP,
+            if (isGlowActive) 14f else 13f
+        )
 
         val flagTint = if (task.isUrgent) COLOR_URGENT else colorIconInactive
         val pinTint = if (task.isPinned) COLOR_PINNED else colorIconInactive
@@ -294,6 +323,40 @@ class TaskWidgetProvider : AppWidgetProvider() {
         })
 
         return rv
+    }
+
+    private fun triggerGlowForHomeExposure(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_WIDGET, Context.MODE_PRIVATE)
+        val now = System.currentTimeMillis()
+        val lastTrigger = prefs.getLong(KEY_LAST_GLOW_TRIGGER, 0L)
+        if (now - lastTrigger < GLOW_DEBOUNCE_MS) return
+
+        prefs.edit()
+            .putLong(KEY_LAST_GLOW_TRIGGER, now)
+            .putLong(KEY_GLOW_UNTIL, now + GLOW_WINDOW_MS)
+            .apply()
+
+        Handler(Looper.getMainLooper()).postDelayed(
+            {
+                context.sendBroadcast(
+                    Intent(ACTION_GLOW_FADE).setClass(context, TaskWidgetProvider::class.java)
+                )
+            },
+            GLOW_WINDOW_MS + 120L
+        )
+    }
+
+    private fun isGlowActive(context: Context): Boolean {
+        val prefs = context.getSharedPreferences(PREFS_WIDGET, Context.MODE_PRIVATE)
+        return System.currentTimeMillis() <= prefs.getLong(KEY_GLOW_UNTIL, 0L)
+    }
+
+    private fun blendTowardWhite(color: Int, ratio: Float): Int {
+        val clamped = ratio.coerceIn(0f, 1f)
+        val r = Color.red(color) + ((255 - Color.red(color)) * clamped).toInt()
+        val g = Color.green(color) + ((255 - Color.green(color)) * clamped).toInt()
+        val b = Color.blue(color) + ((255 - Color.blue(color)) * clamped).toInt()
+        return Color.rgb(r, g, b)
     }
 
     private fun getServiceIntent(

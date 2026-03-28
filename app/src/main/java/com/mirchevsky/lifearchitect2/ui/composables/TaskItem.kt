@@ -51,7 +51,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
@@ -74,27 +76,41 @@ import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 /**
+ *
  * Displays a single pending task in a card.
  *
  * Interaction model:
- * - **Tap card** (outside the title) → marks task complete.
- * - **Long-press card** OR **tap title** → inline title editing via [BasicTextField].
- *   Pressing Done on the keyboard commits the change via [onUpdate].
- * - **Calendar icon (tap)** → opens DatePicker → TimeInput flow to edit the
- *   due date/time. On confirm, [onUpdateDueDate] is called with the old and new millis
- *   so the ViewModel can sync the device calendar correctly. Shows a "Calendar Updated"
- *   popup after the change is confirmed.
- * - **Flag icon** → toggles [TaskEntity.isUrgent]. Filled red when urgent.
- * - **Pin icon** → toggles [TaskEntity.isPinned]. Filled amber when pinned.
  *
- * Title colour priority: urgent (#E53935 red) > pinned (#FFC107 amber) > default.
+ * Tap card (outside the title) → marks task complete.
  *
- * @param task              The task entity to display.
- * @param onCompleted       Called when the user checks the task off.
- * @param onUpdate          Called for pin/urgent toggles and title edits.
- * @param onUpdateDueDate   Called when the due date/time changes. Receives the old millis
- *                          (nullable) and the new millis so the ViewModel can decide
- *                          whether to delete+recreate or update the calendar event.
+ * Long-press card OR tap title → inline title editing via [BasicTextField].
+ *
+ * Pressing Done on the keyboard commits the change via [onUpdate].
+ *
+ * Calendar icon (tap) → opens DatePicker → TimeInput flow to edit the
+ *
+ * due date/time. On confirm, [onUpdateDueDate] is called with the old and new millis
+ *
+ * so the ViewModel can sync the device calendar correctly. Shows a "Calendar Updated"
+ *
+ * popup after the change is confirmed.
+ *
+ * Flag icon → toggles [TaskEntity.isUrgent]. Filled red when urgent.
+ *
+ * Pin icon → toggles [TaskEntity.isPinned]. Filled amber when pinned.
+ *
+ * Title colour is always the app primary green for this surface.
+ *
+ * @param task The task entity to display.
+ *
+ * @param onCompleted Called when the user checks the task off.
+ *
+ * @param onUpdate Called for pin/urgent toggles and title edits.
+ *
+ * @param onUpdateDueDate Called when the due date/time changes. Receives the old millis
+ *
+ *                      (nullable) and the new millis so the ViewModel can decide
+ *                      whether to delete+recreate or update the calendar event.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -102,7 +118,8 @@ fun TaskItem(
     task: TaskEntity,
     onCompleted: (TaskEntity) -> Unit,
     onUpdate: (TaskEntity) -> Unit,
-    onUpdateDueDate: (oldMillis: Long?, newMillis: Long) -> Unit
+    onUpdateDueDate: (oldMillis: Long?, newMillis: Long) -> Unit,
+    spotlightStrength: Float = 0f
 ) {
     val dueDateTime: LocalDateTime? = task.dueDate?.let {
         Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).toLocalDateTime()
@@ -110,7 +127,7 @@ fun TaskItem(
     val dueDate: LocalDate? = dueDateTime?.toLocalDate()
     val isOverdue = dueDate != null && dueDate.isBefore(LocalDate.now())
 
-    // ── Inline editing ──────────────────────────────────────────────────────
+// ── Inline editing ──────────────────────────────────────────────────────
     var isEditing by remember { mutableStateOf(false) }
     var titleFieldValue by remember(task.id) {
         mutableStateOf(TextFieldValue(task.title, selection = TextRange(task.title.length)))
@@ -124,12 +141,12 @@ fun TaskItem(
         isEditing = false
     }
 
-    // ── Date/time picker state ──────────────────────────────────────────────
+// ── Date/time picker state ──────────────────────────────────────────────
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var pendingDateMillis by remember(task.id) { mutableStateOf(task.dueDate) }
 
-    // ── Calendar Updated popup ──────────────────────────────────────────────
+// ── Calendar Updated popup ──────────────────────────────────────────────
     var showCalendarUpdatedPopup by remember { mutableStateOf(false) }
 
     val todayMillis = remember {
@@ -149,14 +166,16 @@ fun TaskItem(
         is24Hour = true
     )
 
-    // ── Title colour ────────────────────────────────────────────────────────
-    val titleColor: Color = when {
-        task.isUrgent -> MaterialTheme.colorScheme.error
-        task.isPinned -> BrandAmber
-        else          -> MaterialTheme.colorScheme.onSurface
-    }
+// ── Title colour ────────────────────────────────────────────────────────
+    val titleColor: Color = MaterialTheme.colorScheme.primary
+    val glowStrength = spotlightStrength.coerceIn(0f, 1f)
+    val titleShadow = Shadow(
+        color = titleColor.copy(alpha = 1.0f * glowStrength),
+        offset = Offset(0f, 0f),
+        blurRadius = 56f * glowStrength
+    )
 
-    // ── Card ────────────────────────────────────────────────────────────
+// ── Card ────────────────────────────────────────────────────────────
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -198,7 +217,10 @@ fun TaskItem(
                         modifier = Modifier
                             .fillMaxWidth()
                             .focusRequester(focusRequester),
-                        textStyle = MaterialTheme.typography.bodyLarge.copy(color = titleColor),
+                        textStyle = MaterialTheme.typography.bodyLarge.copy(
+                            color = titleColor,
+                            shadow = titleShadow
+                        ),
                         cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
@@ -207,7 +229,7 @@ fun TaskItem(
                 } else {
                     Text(
                         text = task.title,
-                        style = MaterialTheme.typography.bodyLarge,
+                        style = MaterialTheme.typography.bodyLarge.copy(shadow = titleShadow),
                         color = titleColor,
                         modifier = Modifier.combinedClickable(
                             onClick     = {
@@ -284,7 +306,7 @@ fun TaskItem(
         }
     }
 
-    // ── Calendar Updated popup — anchored to bottom of screen ────────────
+// ── Calendar Updated popup — anchored to bottom of screen ────────────
     if (showCalendarUpdatedPopup) {
         Popup(
             alignment = Alignment.BottomCenter,
@@ -294,7 +316,7 @@ fun TaskItem(
         }
     }
 
-    // ── Date picker dialog ──────────────────────────────────────────────────
+// ── Date picker dialog ──────────────────────────────────────────────────
     if (showDatePicker) {
         DatePickerDialog(
             onDismissRequest = { showDatePicker = false },
@@ -313,7 +335,7 @@ fun TaskItem(
         }
     }
 
-    // ── Time picker dialog ──────────────────────────────────────────────────
+// ── Time picker dialog ──────────────────────────────────────────────────
     if (showTimePicker) {
         Dialog(onDismissRequest = { showTimePicker = false }) {
             Card(
@@ -361,10 +383,13 @@ fun TaskItem(
 }
 
 /**
+ *
  * A floating "Calendar Updated" confirmation popup that animates upward and fades out,
+ *
  * matching the style of the "Added to Calendar" popup in [AddTaskItem].
  *
  * The outer [Box] is 200 dp tall so the text (anchored at the bottom) can travel
+ *
  * 120 dp upward without leaving the Popup window bounds and being clipped.
  *
  * @param onDismiss Called when the animation completes.
@@ -372,7 +397,7 @@ fun TaskItem(
 @Composable
 private fun CalendarUpdatedPopup(onDismiss: () -> Unit) {
     val yOffset = remember { Animatable(0f) }
-    val alpha   = remember { Animatable(1f) }
+    val alpha = remember { Animatable(1f) }
 
     LaunchedEffect(Unit) {
         yOffset.animateTo(
@@ -386,8 +411,8 @@ private fun CalendarUpdatedPopup(onDismiss: () -> Unit) {
         onDismiss()
     }
 
-    // Tall outer box: text starts at the bottom and travels upward within this window.
-    // Without this height the Popup window clips the text as soon as it moves above y=0.
+// Tall outer box: text starts at the bottom and travels upward within this window.
+// Without this height the Popup window clips the text as soon as it moves above y=0.
     Box(
         modifier = Modifier
             .fillMaxWidth()

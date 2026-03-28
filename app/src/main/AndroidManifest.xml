@@ -24,7 +24,7 @@
         <!-- Google AdMob App ID -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-7210557644472819~2228592252"/>
+            android:value="ca-app-pub-7210557644472819~2228592252" />
 
         <activity
             android:name=".MainActivity"
@@ -67,6 +67,8 @@
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
                 <action android:name="com.mirchevsky.lifearchitect2.WIDGET_REFRESH" />
                 <action android:name="com.mirchevsky.lifearchitect2.COMPLETE_TASK" />
+                <action android:name="android.intent.action.SCREEN_ON" />
+                <action android:name="android.intent.action.USER_PRESENT" />
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"

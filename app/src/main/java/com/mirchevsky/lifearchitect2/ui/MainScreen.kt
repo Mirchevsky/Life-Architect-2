@@ -13,10 +13,10 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarDefaults
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,9 +47,11 @@ import com.mirchevsky.lifearchitect2.ui.viewmodel.MainViewModel
  * The root composable for the entire app UI.
  *
  * Sets up the bottom navigation bar and the [NavHost] that hosts all screens.
+ *
  * The centre tab is a shortcut that navigates to Tasks and focuses the add-task field.
  *
  * Tab order (left → right): Analytics | Trending | + | History | Tasks (Home)
+ *
  * Tasks is the rightmost tab for maximum right-hand thumb accessibility.
  *
  * The [NavigationBar] is hidden via [AnimatedVisibility] when the IME (keyboard) is
@@ -66,17 +68,27 @@ fun MainScreen(viewModel: MainViewModel) {
 
     val context = LocalContext.current
     val analyticsViewModel: AnalyticsViewModel = viewModel(
-        factory = AnalyticsViewModelFactory(viewModel.repository, context.applicationContext)
+        factory = AnalyticsViewModelFactory(
+            viewModel.repository,
+            context.applicationContext
+        )
     )
 
     // Flag that tells TasksScreen to focus the add-task field
     var focusAddTask by remember { mutableStateOf(false) }
+
+    // One-shot spotlight cue for a fresh app entry.
+    var pendingAppOpenGlow by remember { mutableStateOf(true) }
 
     // IME visibility — WindowInsets.ime must be read in @Composable scope (not inside remember lambda)
     val imeBottom = WindowInsets.ime.getBottom(density)
     val imeVisible = imeBottom > 0
 
     Box(modifier = Modifier.fillMaxSize()) {
+        LaunchedEffect(Unit) {
+            pendingAppOpenGlow = true
+        }
+
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             contentWindowInsets = WindowInsets(0),
@@ -100,10 +112,14 @@ fun MainScreen(viewModel: MainViewModel) {
                                 )
                             },
                             label = null,
-                            selected = currentDestination?.hierarchy?.any { it.route == Screen.Analytics.route } == true,
+                            selected = currentDestination?.hierarchy?.any {
+                                it.route == Screen.Analytics.route
+                            } == true,
                             onClick = {
                                 navController.navigate(Screen.Analytics.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
@@ -120,10 +136,14 @@ fun MainScreen(viewModel: MainViewModel) {
                                 )
                             },
                             label = null,
-                            selected = currentDestination?.hierarchy?.any { it.route == Screen.Trending.route } == true,
+                            selected = currentDestination?.hierarchy?.any {
+                                it.route == Screen.Trending.route
+                            } == true,
                             onClick = {
                                 navController.navigate(Screen.Trending.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
@@ -143,7 +163,9 @@ fun MainScreen(viewModel: MainViewModel) {
                             selected = false,
                             onClick = {
                                 navController.navigate(Screen.Tasks.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
@@ -161,10 +183,14 @@ fun MainScreen(viewModel: MainViewModel) {
                                 )
                             },
                             label = null,
-                            selected = currentDestination?.hierarchy?.any { it.route == Screen.History.route } == true,
+                            selected = currentDestination?.hierarchy?.any {
+                                it.route == Screen.History.route
+                            } == true,
                             onClick = {
                                 navController.navigate(Screen.History.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
@@ -181,10 +207,14 @@ fun MainScreen(viewModel: MainViewModel) {
                                 )
                             },
                             label = null,
-                            selected = currentDestination?.hierarchy?.any { it.route == Screen.Tasks.route } == true,
+                            selected = currentDestination?.hierarchy?.any {
+                                it.route == Screen.Tasks.route
+                            } == true,
                             onClick = {
                                 navController.navigate(Screen.Tasks.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                    popUpTo(navController.graph.findStartDestination().id) {
+                                        saveState = true
+                                    }
                                     launchSingleTop = true
                                     restoreState = true
                                 }
@@ -203,16 +233,21 @@ fun MainScreen(viewModel: MainViewModel) {
                     TasksScreen(
                         viewModel = viewModel,
                         focusAddTask = focusAddTask,
-                        onFocusHandled = { focusAddTask = false }
+                        onFocusHandled = { focusAddTask = false },
+                        enableOpenGlow = pendingAppOpenGlow,
+                        onOpenGlowConsumed = { pendingAppOpenGlow = false }
                     )
                 }
+
                 composable(Screen.History.route) {
                     HistoryScreen(viewModel = viewModel)
                 }
+
                 composable(Screen.Trending.route) {
                     val trendsState by viewModel.trendsUiState.collectAsStateWithLifecycle()
                     TrendingScreen(trendsUiState = trendsState)
                 }
+
                 composable(Screen.Analytics.route) {
                     AnalyticsScreen(viewModel = analyticsViewModel)
                 }
