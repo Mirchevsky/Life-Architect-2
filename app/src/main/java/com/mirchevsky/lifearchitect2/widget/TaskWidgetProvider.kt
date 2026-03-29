@@ -229,9 +229,15 @@ class TaskWidgetProvider : AppWidgetProvider() {
         context: Context,
         tasks: List<TaskEntity>
     ): RemoteViews.RemoteCollectionItems {
+        val distinctLayoutCount = tasks
+            .asSequence()
+            .map { getTaskRowLayoutRes(it) }
+            .distinct()
+            .count()
+
         val builder = RemoteViews.RemoteCollectionItems.Builder()
             .setHasStableIds(true)
-            .setViewTypeCount(3)
+            .setViewTypeCount(maxOf(1, distinctLayoutCount))
 
         tasks.forEach { task ->
             val itemRv = buildTaskRow(context, task)
@@ -243,12 +249,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
     }
 
     private fun buildTaskRow(context: Context, task: TaskEntity): RemoteViews {
-        val layoutRes = when {
-            task.isUrgent && task.isPinned -> R.layout.widget_task_item_urgent_pinned
-            task.isUrgent -> R.layout.widget_task_item_urgent
-            task.isPinned -> R.layout.widget_task_item_pinned
-            else -> R.layout.widget_task_item
-        }
+        val layoutRes = getTaskRowLayoutRes(task)
 
         val rv = RemoteViews(context.packageName, layoutRes)
         val colorIconInactive = context.getColor(R.color.widget_icon_inactive)
@@ -323,6 +324,15 @@ class TaskWidgetProvider : AppWidgetProvider() {
         })
 
         return rv
+    }
+
+    private fun getTaskRowLayoutRes(task: TaskEntity): Int {
+        return when {
+            task.isUrgent && task.isPinned -> R.layout.widget_task_item_urgent_pinned
+            task.isUrgent -> R.layout.widget_task_item_urgent
+            task.isPinned -> R.layout.widget_task_item_pinned
+            else -> R.layout.widget_task_item
+        }
     }
 
     private fun triggerGlowForHomeExposure(context: Context) {
