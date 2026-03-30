@@ -7,6 +7,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -15,6 +16,8 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -24,22 +27,24 @@ import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.PushPin
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DatePicker
-import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SelectableDates
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
+import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimeInput
 import androidx.compose.material3.rememberDatePickerState
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -55,6 +60,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -63,8 +69,10 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import com.mirchevsky.lifearchitect2.R
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
 import com.mirchevsky.lifearchitect2.ui.theme.BrandAmber
 import com.mirchevsky.lifearchitect2.ui.theme.Purple
@@ -109,8 +117,8 @@ import java.time.format.DateTimeFormatter
  *
  * @param onUpdateDueDate Called when the due date/time changes. Receives the old millis
  *
- *                      (nullable) and the new millis so the ViewModel can decide
- *                      whether to delete+recreate or update the calendar event.
+ *                  (nullable) and the new millis so the ViewModel can decide
+ *                  whether to delete+recreate or update the calendar event.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -127,13 +135,15 @@ fun TaskItem(
     val dueDate: LocalDate? = dueDateTime?.toLocalDate()
     val isOverdue = dueDate != null && dueDate.isBefore(LocalDate.now())
 
-// ── Inline editing ──────────────────────────────────────────────────────
+    // ── Inline editing ──────────────────────────────────────────────────────
     var isEditing by remember { mutableStateOf(false) }
     var titleFieldValue by remember(task.id) {
         mutableStateOf(TextFieldValue(task.title, selection = TextRange(task.title.length)))
     }
     val focusRequester = remember { FocusRequester() }
-    LaunchedEffect(isEditing) { if (isEditing) focusRequester.requestFocus() }
+    LaunchedEffect(isEditing) {
+        if (isEditing) focusRequester.requestFocus()
+    }
 
     fun commitEdit() {
         val trimmed = titleFieldValue.text.trim()
@@ -141,12 +151,12 @@ fun TaskItem(
         isEditing = false
     }
 
-// ── Date/time picker state ──────────────────────────────────────────────
+    // ── Date/time picker state ──────────────────────────────────────────────
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var pendingDateMillis by remember(task.id) { mutableStateOf(task.dueDate) }
 
-// ── Calendar Updated popup ──────────────────────────────────────────────
+    // ── Calendar Updated popup ──────────────────────────────────────────────
     var showCalendarUpdatedPopup by remember { mutableStateOf(false) }
 
     val todayMillis = remember {
@@ -158,15 +168,23 @@ fun TaskItem(
             override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis >= todayMillis
         }
     )
-    val existingHour   = task.dueDate?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).hour   } ?: 9
-    val existingMinute = task.dueDate?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).minute } ?: 0
-    val timePickerState = rememberTimePickerState(
-        initialHour = existingHour,
-        initialMinute = existingMinute,
-        is24Hour = true
-    )
+    var isAllDay by remember(task.id) { mutableStateOf(false) }
+    var hour by remember(task.id) {
+        mutableStateOf(
+            task.dueDate?.let {
+                Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).hour
+            } ?: 9
+        )
+    }
+    var minute by remember(task.id) {
+        mutableStateOf(
+            task.dueDate?.let {
+                Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()).minute
+            } ?: 0
+        )
+    }
 
-// ── Title colour ────────────────────────────────────────────────────────
+    // ── Title colour ────────────────────────────────────────────────────────
     val titleColor: Color = MaterialTheme.colorScheme.primary
     val glowStrength = spotlightStrength.coerceIn(0f, 1f)
     val titleShadow = Shadow(
@@ -175,7 +193,7 @@ fun TaskItem(
         blurRadius = 56f * glowStrength
     )
 
-// ── Card ────────────────────────────────────────────────────────────
+    // ── Card ────────────────────────────────────────────────────────────
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -187,28 +205,29 @@ fun TaskItem(
             modifier = Modifier
                 .fillMaxWidth()
                 .combinedClickable(
-                    onClick    = { if (!isEditing) onCompleted(task) },
+                    onClick = { if (!isEditing) onCompleted(task) },
                     onLongClick = {
-                        titleFieldValue = TextFieldValue(task.title, selection = TextRange(task.title.length))
+                        titleFieldValue = TextFieldValue(
+                            task.title,
+                            selection = TextRange(task.title.length)
+                        )
                         isEditing = true
                     }
                 )
                 .padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            // Checkbox
             Checkbox(
                 checked = false,
                 onCheckedChange = null,
                 modifier = Modifier.size(36.dp),
                 colors = CheckboxDefaults.colors(
                     uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    checkedColor   = MaterialTheme.colorScheme.primary
+                    checkedColor = MaterialTheme.colorScheme.primary
                 )
             )
             Spacer(modifier = Modifier.width(4.dp))
 
-            // Title + due-date label
             Column(modifier = Modifier.weight(1f)) {
                 if (isEditing) {
                     BasicTextField(
@@ -232,23 +251,30 @@ fun TaskItem(
                         style = MaterialTheme.typography.bodyLarge.copy(shadow = titleShadow),
                         color = titleColor,
                         modifier = Modifier.combinedClickable(
-                            onClick     = {
-                                titleFieldValue = TextFieldValue(task.title, selection = TextRange(task.title.length))
+                            onClick = {
+                                titleFieldValue = TextFieldValue(
+                                    task.title,
+                                    selection = TextRange(task.title.length)
+                                )
                                 isEditing = true
                             },
                             onLongClick = {
-                                titleFieldValue = TextFieldValue(task.title, selection = TextRange(task.title.length))
+                                titleFieldValue = TextFieldValue(
+                                    task.title,
+                                    selection = TextRange(task.title.length)
+                                )
                                 isEditing = true
                             }
                         )
                     )
                 }
+
                 if (dueDate != null) {
                     val dateLabel = dueDate.format(DateTimeFormatter.ofPattern("MMM d"))
                     val timeLabel = dueDateTime.format(DateTimeFormatter.ofPattern("HH:mm"))
                     val label = "$dateLabel, $timeLabel"
                     Text(
-                        text  = if (isOverdue) "Overdue — $label" else label,
+                        text = if (isOverdue) "Overdue — $label" else label,
                         style = MaterialTheme.typography.bodySmall,
                         color = if (isOverdue) MaterialTheme.colorScheme.error
                         else MaterialTheme.colorScheme.onSurfaceVariant
@@ -256,11 +282,6 @@ fun TaskItem(
                 }
             }
 
-            // ── Action icons (compact, right-aligned) ───────────────────────
-
-            // Calendar icon — only shown when a due date is set.
-            // Tap → opens DatePicker → TimeInput flow to edit the date & time.
-            // The updated date/time is synced to the device calendar via onUpdateDueDate.
             if (dueDate != null) {
                 IconButton(
                     onClick = { showDatePicker = true },
@@ -269,14 +290,12 @@ fun TaskItem(
                     Icon(
                         imageVector = Icons.Default.CalendarToday,
                         contentDescription = "Edit date & time",
-                        tint = if (isOverdue) MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.primary,
+                        tint = Purple,
                         modifier = Modifier.size(20.dp)
                     )
                 }
             }
 
-            // Flag icon — urgent toggle
             IconButton(
                 onClick = { onUpdate(task.copy(isUrgent = !task.isUrgent)) },
                 modifier = Modifier.size(36.dp)
@@ -290,7 +309,6 @@ fun TaskItem(
                 )
             }
 
-            // Pin icon — pin toggle
             IconButton(
                 onClick = { onUpdate(task.copy(isPinned = !task.isPinned)) },
                 modifier = Modifier.size(36.dp)
@@ -306,7 +324,7 @@ fun TaskItem(
         }
     }
 
-// ── Calendar Updated popup — anchored to bottom of screen ────────────
+    // ── Calendar Updated popup — anchored to bottom of screen ────────────
     if (showCalendarUpdatedPopup) {
         Popup(
             alignment = Alignment.BottomCenter,
@@ -316,69 +334,295 @@ fun TaskItem(
         }
     }
 
-// ── Date picker dialog ──────────────────────────────────────────────────
+    // ── Date picker dialog ──────────────────────────────────────────────────
     if (showDatePicker) {
-        DatePickerDialog(
+        Dialog(
             onDismissRequest = { showDatePicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    pendingDateMillis = datePickerState.selectedDateMillis
-                    showDatePicker = false
-                    showTimePicker = true
-                }) { Text("Next") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDatePicker = false }) { Text("Cancel") }
-            }
+            properties = DialogProperties(usePlatformDefaultWidth = false)
         ) {
-            DatePicker(state = datePickerState)
-        }
-    }
-
-// ── Time picker dialog ──────────────────────────────────────────────────
-    if (showTimePicker) {
-        Dialog(onDismissRequest = { showTimePicker = false }) {
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    .padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = taskEditSheetColor()
+                )
             ) {
                 Column(
-                    modifier = Modifier.padding(16.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 20.dp, top = 16.dp, bottom = 16.dp),
                     horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Text(
-                        text = "Select time",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                    TimeInput(state = timePickerState)
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 12.dp),
-                        horizontalArrangement = Arrangement.End
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        color = taskEditInnerContainerColor()
                     ) {
-                        TextButton(onClick = { showTimePicker = false }) { Text("Cancel") }
-                        TextButton(onClick = {
-                            showTimePicker = false
-                            val selectedDate = pendingDateMillis ?: return@TextButton
-                            val localDate = Instant.ofEpochMilli(selectedDate)
-                                .atZone(ZoneId.systemDefault()).toLocalDate()
-                            val newMillis = LocalDateTime
-                                .of(localDate, LocalTime.of(timePickerState.hour, timePickerState.minute))
-                                .atZone(ZoneId.systemDefault())
-                                .toInstant()
-                                .toEpochMilli()
-                            onUpdateDueDate(task.dueDate, newMillis)
-                            showCalendarUpdatedPopup = true
-                        }) { Text("Confirm") }
+                        DatePicker(
+                            state = datePickerState,
+                            modifier = Modifier.padding(0.dp),
+                            title = null,
+                            headline = null,
+                            showModeToggle = false,
+                            colors = DatePickerDefaults.colors(
+                                containerColor = taskEditDatePickerContainerColor(),
+                                dayContentColor = MaterialTheme.colorScheme.onSurface,
+                                selectedDayContainerColor = Purple,
+                                selectedDayContentColor = Color.White,
+                                todayContentColor = MaterialTheme.colorScheme.onSurface,
+                                todayDateBorderColor = MaterialTheme.colorScheme.onSurface,
+                                weekdayContentColor = MaterialTheme.colorScheme.onSurface,
+                                navigationContentColor = MaterialTheme.colorScheme.onSurface,
+                                subheadContentColor = MaterialTheme.colorScheme.onSurface
+                            )
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = { showDatePicker = false },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = taskEditBackButtonContainerColor(),
+                                contentColor = Purple
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+                        ) {
+                            Text(
+                                text = "Back",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                maxLines = 1
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                pendingDateMillis = datePickerState.selectedDateMillis ?: todayMillis
+                                showDatePicker = false
+                                showTimePicker = true
+                            },
+                            modifier = Modifier
+                                .weight(2f)
+                                .height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Purple,
+                                contentColor = Color.White
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Text(
+                                text = "Set Time",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp
+                            )
+                        }
                     }
                 }
             }
         }
+    }
+
+    // ── Time picker dialog ──────────────────────────────────────────────────
+    if (showTimePicker) {
+        Dialog(
+            onDismissRequest = { showTimePicker = false },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = taskEditSheetColor()
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "All Day",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                        Spacer(Modifier.weight(1f))
+                        Switch(
+                            checked = isAllDay,
+                            onCheckedChange = { isAllDay = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Purple,
+                                uncheckedThumbColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+                                uncheckedTrackColor = taskEditInnerContainerColor()
+                            )
+                        )
+                    }
+
+                    if (!isAllDay) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(18.dp),
+                            color = taskEditInnerContainerColor()
+                        ) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(
+                                    vertical = 24.dp,
+                                    horizontal = 12.dp
+                                )
+                            ) {
+                                TimeInputFields(
+                                    hour = hour,
+                                    minute = minute,
+                                    onHourChange = { hour = it },
+                                    onMinuteChange = { minute = it },
+                                    fieldBackground = taskEditTimeFieldBackgroundColor(),
+                                    fieldContent = taskEditTimeFieldContentColor(),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(Modifier.height(if (isAllDay) 24.dp else 16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = { showTimePicker = false },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = taskEditBackButtonContainerColor(),
+                                contentColor = Purple
+                            ),
+                            elevation = ButtonDefaults.buttonElevation(defaultElevation = 0.dp)
+                        ) {
+                            Text(
+                                text = "Back",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                maxLines = 1
+                            )
+                        }
+
+                        Button(
+                            onClick = {
+                                showTimePicker = false
+                                val selectedDate = pendingDateMillis ?: return@Button
+                                val localDate = Instant.ofEpochMilli(selectedDate)
+                                    .atZone(ZoneId.systemDefault())
+                                    .toLocalDate()
+                                val localDateTime = if (isAllDay) {
+                                    LocalDateTime.of(localDate, LocalTime.MIDNIGHT)
+                                } else {
+                                    LocalDateTime.of(localDate, LocalTime.of(hour, minute))
+                                }
+                                val newMillis = localDateTime
+                                    .atZone(ZoneId.systemDefault())
+                                    .toInstant()
+                                    .toEpochMilli()
+                                onUpdateDueDate(task.dueDate, newMillis)
+                                showCalendarUpdatedPopup = true
+                            },
+                            modifier = Modifier
+                                .weight(2f)
+                                .height(50.dp),
+                            shape = RoundedCornerShape(14.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = Purple,
+                                contentColor = Color.White
+                            ),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 0.dp)
+                        ) {
+                            Text(
+                                text = "Update Event",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 15.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun taskEditSheetColor(): Color {
+    return if (isSystemInDarkTheme()) {
+        MaterialTheme.colorScheme.surface
+    } else {
+        colorResource(id = R.color.widget_background)
+    }
+}
+
+@Composable
+private fun taskEditInnerContainerColor(): Color {
+    return if (isSystemInDarkTheme()) {
+        Color.Transparent
+    } else {
+        colorResource(id = R.color.widget_item_card)
+    }
+}
+
+@Composable
+private fun taskEditDatePickerContainerColor(): Color {
+    return if (isSystemInDarkTheme()) {
+        MaterialTheme.colorScheme.surface
+    } else {
+        colorResource(id = R.color.widget_item_card)
+    }
+}
+
+@Composable
+private fun taskEditBackButtonContainerColor(): Color {
+    return if (isSystemInDarkTheme()) {
+        Color.White
+    } else {
+        colorResource(id = R.color.widget_item_card)
+    }
+}
+
+@Composable
+private fun taskEditTimeFieldBackgroundColor(): Color {
+    return if (isSystemInDarkTheme()) {
+        MaterialTheme.colorScheme.surfaceVariant
+    } else {
+        colorResource(id = R.color.white)
+    }
+}
+
+@Composable
+private fun taskEditTimeFieldContentColor(): Color {
+    return if (isSystemInDarkTheme()) {
+        MaterialTheme.colorScheme.onSurface
+    } else {
+        colorResource(id = R.color.widget_text_primary)
     }
 }
 
@@ -411,8 +655,6 @@ private fun CalendarUpdatedPopup(onDismiss: () -> Unit) {
         onDismiss()
     }
 
-// Tall outer box: text starts at the bottom and travels upward within this window.
-// Without this height the Popup window clips the text as soon as it moves above y=0.
     Box(
         modifier = Modifier
             .fillMaxWidth()
