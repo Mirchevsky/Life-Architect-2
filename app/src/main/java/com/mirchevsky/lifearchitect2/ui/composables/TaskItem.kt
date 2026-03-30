@@ -186,6 +186,11 @@ fun TaskItem(
 
     // ── Title colour ────────────────────────────────────────────────────────
     val titleColor: Color = MaterialTheme.colorScheme.primary
+    val inactiveActionTint = if (isSystemInDarkTheme()) {
+        colorResource(id = R.color.white)
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
     val glowStrength = spotlightStrength.coerceIn(0f, 1f)
     val titleShadow = Shadow(
         color = titleColor.copy(alpha = 1.0f * glowStrength),
@@ -222,7 +227,7 @@ fun TaskItem(
                 onCheckedChange = null,
                 modifier = Modifier.size(36.dp),
                 colors = CheckboxDefaults.colors(
-                    uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                    uncheckedColor = inactiveActionTint,
                     checkedColor = MaterialTheme.colorScheme.primary
                 )
             )
@@ -304,7 +309,7 @@ fun TaskItem(
                     imageVector = if (task.isUrgent) Icons.Filled.Flag else Icons.Outlined.Flag,
                     contentDescription = if (task.isUrgent) "Remove urgent" else "Mark urgent",
                     tint = if (task.isUrgent) MaterialTheme.colorScheme.error
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    else inactiveActionTint,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -317,7 +322,7 @@ fun TaskItem(
                     imageVector = if (task.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
                     contentDescription = if (task.isPinned) "Unpin task" else "Pin task to top",
                     tint = if (task.isPinned) BrandAmber
-                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                    else inactiveActionTint,
                     modifier = Modifier.size(20.dp)
                 )
             }

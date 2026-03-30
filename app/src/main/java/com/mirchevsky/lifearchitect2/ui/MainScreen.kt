@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AddCircle
@@ -14,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -84,6 +86,17 @@ fun MainScreen(viewModel: MainViewModel) {
     val imeBottom = WindowInsets.ime.getBottom(density)
     val imeVisible = imeBottom > 0
 
+    val isDarkTheme = isSystemInDarkTheme()
+    val navigationItemColors = if (isDarkTheme) {
+        NavigationBarItemDefaults.colors(
+            selectedIconColor = MaterialTheme.colorScheme.onSurface,
+            unselectedIconColor = MaterialTheme.colorScheme.onSurface,
+            indicatorColor = MaterialTheme.colorScheme.surface
+        )
+    } else {
+        NavigationBarItemDefaults.colors()
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         LaunchedEffect(Unit) {
             pendingAppOpenGlow = true
@@ -112,6 +125,7 @@ fun MainScreen(viewModel: MainViewModel) {
                                 )
                             },
                             label = null,
+                            colors = navigationItemColors,
                             selected = currentDestination?.hierarchy?.any {
                                 it.route == Screen.Analytics.route
                             } == true,
@@ -136,6 +150,7 @@ fun MainScreen(viewModel: MainViewModel) {
                                 )
                             },
                             label = null,
+                            colors = navigationItemColors,
                             selected = currentDestination?.hierarchy?.any {
                                 it.route == Screen.Trending.route
                             } == true,
@@ -160,6 +175,7 @@ fun MainScreen(viewModel: MainViewModel) {
                                 )
                             },
                             label = null,
+                            colors = navigationItemColors,
                             selected = false,
                             onClick = {
                                 navController.navigate(Screen.Tasks.route) {
@@ -183,6 +199,7 @@ fun MainScreen(viewModel: MainViewModel) {
                                 )
                             },
                             label = null,
+                            colors = navigationItemColors,
                             selected = currentDestination?.hierarchy?.any {
                                 it.route == Screen.History.route
                             } == true,
@@ -207,6 +224,7 @@ fun MainScreen(viewModel: MainViewModel) {
                                 )
                             },
                             label = null,
+                            colors = navigationItemColors,
                             selected = currentDestination?.hierarchy?.any {
                                 it.route == Screen.Tasks.route
                             } == true,

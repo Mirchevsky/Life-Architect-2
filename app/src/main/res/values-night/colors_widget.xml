@@ -15,10 +15,10 @@
     <color name="widget_text_secondary">#9CA3AF</color>
 
     <!-- Inactive icon tint (flag, pin, checkbox when not active) -->
-    <color name="widget_icon_inactive">#6B7280</color>
+    <color name="widget_icon_inactive">@color/white</color>
 
     <!-- Checkbox unchecked border -->
-    <color name="widget_checkbox_stroke">#6B7280</color>
+    <color name="widget_checkbox_stroke">@color/white</color>
 
     <!-- Urgent task text and flag icon -->
     <color name="widget_urgent">#F87171</color>
