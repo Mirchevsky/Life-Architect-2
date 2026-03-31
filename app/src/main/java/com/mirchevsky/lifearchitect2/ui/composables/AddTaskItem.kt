@@ -53,9 +53,9 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SelectableDates
@@ -95,7 +95,6 @@ import com.mirchevsky.lifearchitect2.permissions.PermissionGateState
 import com.mirchevsky.lifearchitect2.permissions.PermissionPrefs
 import com.mirchevsky.lifearchitect2.permissions.openAppPermissionSettings
 import com.mirchevsky.lifearchitect2.permissions.resolvePermissionGateState
-import com.mirchevsky.lifearchitect2.ui.theme.BrandGreen
 import com.mirchevsky.lifearchitect2.ui.theme.Purple
 import com.mirchevsky.lifearchitect2.utils.DateIntentParser
 import java.time.Instant
@@ -172,6 +171,7 @@ private fun inAppBackButtonContainerColor(): Color {
 }
 
 /**
+ *
  * The inline add-task panel shown at the bottom of the Tasks screen.
  *
  * Design
@@ -185,12 +185,17 @@ private fun inAppBackButtonContainerColor(): Color {
  * Three static side-by-side action buttons (right-aligned):
  *
  * Mic button: uses Android's [SpeechRecognizer] API directly — no system
+ *
  * overlay, no privacy notice dialog. Recognizes in the device's default language.
+ *
  * The mic button pulses while listening; partial results fill the field in real-time.
  *
  * Calendar button (purple): opens a two-step date + time picker pre-filled by
+ *
  * [DateIntentParser]. On confirm, writes the event silently to the system calendar
+ *
  * via [CalendarContract] content provider and requests an immediate sync. Falls
+ *
  * back to [Intent.ACTION_INSERT] if no calendar account is configured.
  *
  * Add button (green): adds the task to the app only, no calendar event.
@@ -198,16 +203,23 @@ private fun inAppBackButtonContainerColor(): Color {
  * Keyboard behaviour (WhatsApp-style)
  *
  * The composable uses [Modifier.imePadding] so the entire card floats above the
+ *
  * software keyboard whenever the text field is focused — the action buttons are always
+ *
  * visible. [ImeAction.Done] on the keyboard simply clears focus (lowers the keyboard)
+ *
  * without submitting, so the user can still tap calendar or add.
  *
  * All three buttons dim to 25 % alpha when no text is present.
  *
  * @param onAddTask Called with the task title, difficulty string, and optional due
+ *
  * date when the user confirms via either button.
+ *
  * @param requestFocus When true, the text field requests focus on first composition.
+ *
  * @param onFocusConsumed Called once after the focus request fires so the caller
+ *
  * can reset the flag.
  */
 @OptIn(ExperimentalMaterial3Api::class, FlowPreview::class)
@@ -407,7 +419,9 @@ fun AddTaskItem(
     }
 
     /**
+     *
      * Silently inserts a calendar event via [CalendarContract] content provider
+     *
      * (no app switch) and simultaneously adds the task to the app.
      *
      * Strategy:
@@ -518,6 +532,7 @@ fun AddTaskItem(
     }
 
     /**
+     *
      * Starts the [SpeechRecognizer] directly — no system overlay, no privacy notice.
      *
      * Uses the device's default language automatically (no EXTRA_LANGUAGE needed).
@@ -644,18 +659,11 @@ fun AddTaskItem(
                 ) {
                     Spacer(modifier = Modifier.weight(1f))
 
-                    FilledIconButton(
+                    IconButton(
                         onClick = { startListening() },
                         modifier = Modifier.size(44.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = MaterialTheme.colorScheme.primary.copy(
-                                alpha = when {
-                                    isMicActive -> 1f
-                                    hasText -> 0.6f
-                                    else -> 0.25f
-                                }
-                            ),
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = Color.Transparent,
                             contentColor = Color.White
                         )
                     ) {
@@ -670,13 +678,13 @@ fun AddTaskItem(
                         }
                     }
 
-                    FilledIconButton(
+                    IconButton(
                         onClick = { openCalendarPicker() },
                         modifier = Modifier.size(44.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = Purple.copy(alpha = if (hasText) 1f else 0.25f),
-                            contentColor = Color.White
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = Color.Transparent,
+                            contentColor = Color.White,
+                            disabledContentColor = Color.White.copy(alpha = 0.25f)
                         ),
                         enabled = hasText
                     ) {
@@ -687,13 +695,13 @@ fun AddTaskItem(
                         )
                     }
 
-                    FilledIconButton(
+                    IconButton(
                         onClick = { submitTaskOnly() },
                         modifier = Modifier.size(44.dp),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = IconButtonDefaults.filledIconButtonColors(
-                            containerColor = BrandGreen.copy(alpha = if (hasText) 1f else 0.25f),
-                            contentColor = Color.White
+                        colors = IconButtonDefaults.iconButtonColors(
+                            containerColor = Color.Transparent,
+                            contentColor = Color.White,
+                            disabledContentColor = Color.White.copy(alpha = 0.25f)
                         ),
                         enabled = hasText
                     ) {
@@ -1092,8 +1100,11 @@ fun AddTaskItem(
 }
 
 /**
+ *
  * Three small circles that bounce up and down in sequence, indicating that the
+ *
  * [SpeechRecognizer] is actively listening. Each dot is 4 dp — small enough to
+ *
  * sit comfortably inside the 44 dp mic button alongside the existing icon style.
  *
  * Dots are staggered by 150 ms to create a rolling wave effect.
@@ -1137,7 +1148,9 @@ private fun RecordingDotsIndicator() {
 }
 
 /**
+ *
  * A floating "Added to Calendar" confirmation popup that animates upward and fades out,
+ *
  * matching the style of [XpPopup].
  *
  * @param onDismiss Called when the animation completes.

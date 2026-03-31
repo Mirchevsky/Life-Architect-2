@@ -5,26 +5,27 @@
     Main frame layout for the Life Architect 2 task list home screen widget.
 
     Structure:
-      ┌─────────────────────────────────────────────┐
-      │  Tasks               [mic]  [cal]  [+]      │  ← header row
-      │─────────────────────────────────────────────│  ← divider
-      │  • Task title              Mar 29, 22:00    │
-      │  • Task title                               │  ← ListView rows
-      │  • Task title              Mar 24, 09:00    │
-      │    …                                        │
-      └─────────────────────────────────────────────┘
+    ┌─────────────────────────────────────────────┐
+    │ Tasks                          [mic] [cal] [+] │ ← header row
+    │─────────────────────────────────────────────│ ← divider
+    │ • Task title                     Mar 29, 22:00 │
+    │ • Task title                                  │ ← ListView rows
+    │ • Task title                     Mar 24, 09:00 │
+    │ …                                               │
+    └─────────────────────────────────────────────┘
 
-    Button order matches AddTaskItem.kt: Mic → Calendar → Add (left to right).
+    Button order matches AddTaskItem.kt:
+    Mic → Calendar → Add (left to right).
 
     Colours use @color/widget_* references that resolve to light or dark
     variants automatically based on the system night-mode setting:
-      res/values/colors_widget.xml       (light mode defaults)
-      res/values-night/colors_widget.xml (dark mode overrides)
+      res/values/colors_widget.xml        (light mode defaults)
+      res/values-night/colors_widget.xml  (dark mode overrides)
 
-    Place at: app/src/main/res/layout/widget_task_list.xml
+    Place at:
+    app/src/main/res/layout/widget_task_list.xml
 -->
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -75,8 +76,9 @@
                 android:id="@+id/widget_btn_mic"
                 android:layout_width="34dp"
                 android:layout_height="34dp"
-                android:background="@drawable/widget_btn_bg_teal"
+                android:background="@android:color/transparent"
                 android:src="@drawable/widget_ic_mic"
+                android:tint="@color/widget_btn_icon"
                 android:contentDescription="Voice input"
                 android:scaleType="centerInside"
                 android:padding="7dp" />
@@ -86,24 +88,26 @@
                 android:id="@+id/widget_btn_add_event"
                 android:layout_width="34dp"
                 android:layout_height="34dp"
-                android:background="@drawable/widget_btn_bg_purple"
+                android:layout_marginStart="5dp"
+                android:background="@android:color/transparent"
                 android:src="@drawable/widget_ic_calendar"
+                android:tint="@color/widget_btn_icon"
                 android:contentDescription="Add calendar event"
                 android:scaleType="centerInside"
-                android:padding="7dp"
-                android:layout_marginStart="5dp" />
+                android:padding="7dp" />
 
             <!-- Add Task button — centre-aligns with pin icon in task rows -->
             <ImageButton
                 android:id="@+id/widget_btn_add_task"
                 android:layout_width="34dp"
                 android:layout_height="34dp"
-                android:background="@drawable/widget_btn_bg_green"
+                android:layout_marginStart="5dp"
+                android:background="@android:color/transparent"
                 android:src="@drawable/widget_ic_add"
+                android:tint="@color/widget_btn_icon"
                 android:contentDescription="Add task"
                 android:scaleType="centerInside"
-                android:padding="7dp"
-                android:layout_marginStart="5dp" />
+                android:padding="7dp" />
 
         </LinearLayout>
 
@@ -144,5 +148,4 @@
         android:textColor="@color/widget_text_secondary"
         android:textSize="13sp"
         android:visibility="gone" />
-
 </LinearLayout>
