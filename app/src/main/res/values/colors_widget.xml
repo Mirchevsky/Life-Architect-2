@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- colors_widget.xml (default = light mode)
-─────────────────────────────────────────────────────────────────────────
-Widget colour tokens for LIGHT mode.
-Dark-mode counterparts live in res/values-night/colors_widget.xml.
+<!--
+    colors_widget.xml (default = light mode)
+    ─────────────────────────────────────────────────────────────────────────
+    Widget colour tokens for LIGHT mode.
+    Dark-mode counterparts live in res/values-night/colors_widget.xml.
 
-Place at:
-app/src/main/res/values/colors_widget.xml
+    Place at: app/src/main/res/values/colors_widget.xml
 -->
 <resources>
     <!-- Widget outer frame background -->
@@ -39,6 +39,10 @@ app/src/main/res/values/colors_widget.xml
     <color name="widget_accent_green">#10B981</color>
     <color name="widget_checkbox_fill">#3310B981</color>
     <color name="widget_checkbox_glow_halo">#3D10B981</color>
+    <color name="widget_checkbox_fill_pinned">#33F59E0B</color>
+    <color name="widget_checkbox_glow_halo_pinned">#3DF59E0B</color>
+    <color name="widget_checkbox_fill_urgent">#33EF4444</color>
+    <color name="widget_checkbox_glow_halo_urgent">#3DEF4444</color>
 
     <!-- Accent purple (Calendar button background) -->
     <color name="widget_accent_purple">#7C3AED</color>

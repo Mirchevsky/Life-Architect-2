@@ -256,7 +256,10 @@ class TaskWidgetProvider : AppWidgetProvider() {
         val colorBrandGreen = context.getColor(R.color.widget_accent_green)
         val isGlowActive = isGlowActive(context)
         val titleColor = if (isGlowActive) blendTowardWhite(colorBrandGreen, 0.62f) else colorBrandGreen
-        rv.setImageViewResource(R.id.widget_item_dot, R.drawable.widget_checkbox_glow)
+        rv.setImageViewResource(
+            R.id.widget_item_dot,
+            getCheckboxDrawableRes(task)
+        )
 
         val safeTitle = BidiFormatter.getInstance().unicodeWrap(task.title)
         rv.setTextViewText(R.id.widget_item_title, safeTitle)
@@ -333,6 +336,14 @@ class TaskWidgetProvider : AppWidgetProvider() {
             task.isUrgent -> R.layout.widget_task_item_urgent
             task.isPinned -> R.layout.widget_task_item_pinned
             else -> R.layout.widget_task_item
+        }
+    }
+
+    private fun getCheckboxDrawableRes(task: TaskEntity): Int {
+        return when {
+            task.isUrgent -> R.drawable.widget_checkbox_glow_urgent
+            task.isPinned -> R.drawable.widget_checkbox_glow_pinned
+            else -> R.drawable.widget_checkbox_glow
         }
     }
 

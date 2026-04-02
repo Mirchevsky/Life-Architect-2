@@ -26,7 +26,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.Flag
@@ -50,8 +49,8 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -121,8 +120,8 @@ import java.time.format.DateTimeFormatter
  *
  * @param onUpdateDueDate Called when the due date/time changes. Receives the old millis
  *
- *              (nullable) and the new millis so the ViewModel can decide
- *              whether to delete+recreate or update the calendar event.
+ *         (nullable) and the new millis so the ViewModel can decide
+ *         whether to delete+recreate or update the calendar event.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -226,7 +225,15 @@ fun TaskItem(
                 .padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            AnimatedCompletionGlowBox(modifier = Modifier.size(36.dp))
+            val completionAccent = when {
+                task.isUrgent -> MaterialTheme.colorScheme.error
+                task.isPinned -> BrandAmber
+                else -> MaterialTheme.colorScheme.primary
+            }
+            AnimatedCompletionGlowBox(
+                accentColor = completionAccent,
+                modifier = Modifier.size(36.dp)
+            )
             Spacer(modifier = Modifier.width(4.dp))
 
             Column(modifier = Modifier.weight(1f)) {
@@ -435,7 +442,7 @@ fun TaskItem(
         }
     }
 
-    // ── Time picker dialog ──────────────────────────────────────────────────
+    // ── Time picker dialog ─────────────────────────────────────────────────
     if (showTimePicker) {
         Dialog(
             onDismissRequest = { showTimePicker = false },
@@ -574,7 +581,10 @@ fun TaskItem(
 }
 
 @Composable
-private fun AnimatedCompletionGlowBox(modifier: Modifier = Modifier) {
+private fun AnimatedCompletionGlowBox(
+    accentColor: Color,
+    modifier: Modifier = Modifier
+) {
     val infinite = androidx.compose.animation.core.rememberInfiniteTransition(label = "taskCompletionGlow")
     val pulse by infinite.animateFloat(
         initialValue = 0.72f,
@@ -585,7 +595,6 @@ private fun AnimatedCompletionGlowBox(modifier: Modifier = Modifier) {
         ),
         label = "taskCompletionGlowPulse"
     )
-    val primary = MaterialTheme.colorScheme.primary
     val shape = RoundedCornerShape(6.dp)
 
     Box(
@@ -598,7 +607,7 @@ private fun AnimatedCompletionGlowBox(modifier: Modifier = Modifier) {
                 .padding(2.dp)
                 .drawBehind {
                     drawCircle(
-                        color = primary.copy(alpha = 0.18f * pulse),
+                        color = accentColor.copy(alpha = 0.18f * pulse),
                         radius = size.minDimension * 0.64f
                     )
                 }
@@ -607,17 +616,9 @@ private fun AnimatedCompletionGlowBox(modifier: Modifier = Modifier) {
             modifier = Modifier
                 .size(20.dp)
                 .clip(shape)
-                .background(primary.copy(alpha = 0.22f + (0.08f * pulse)))
-                .border(width = 1.5.dp, color = primary, shape = shape),
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = Icons.Filled.Check,
-                contentDescription = null,
-                tint = primary.copy(alpha = 0.92f),
-                modifier = Modifier.size(13.dp)
-            )
-        }
+                .background(accentColor.copy(alpha = 0.22f + (0.08f * pulse)))
+                .border(width = 1.5.dp, color = accentColor, shape = shape)
+        )
     }
 }
 

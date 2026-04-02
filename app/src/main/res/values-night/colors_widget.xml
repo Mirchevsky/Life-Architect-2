@@ -30,6 +30,10 @@
     <color name="widget_accent_green">#10B981</color>
     <color name="widget_checkbox_fill">#4710B981</color>
     <color name="widget_checkbox_glow_halo">#5210B981</color>
+    <color name="widget_checkbox_fill_pinned">#47FBBF24</color>
+    <color name="widget_checkbox_glow_halo_pinned">#52FBBF24</color>
+    <color name="widget_checkbox_fill_urgent">#47F87171</color>
+    <color name="widget_checkbox_glow_halo_urgent">#52F87171</color>
 
     <!-- Accent purple (Calendar button background) -->
     <color name="widget_accent_purple">#7C3AED</color>

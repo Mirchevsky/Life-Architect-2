@@ -17,10 +17,13 @@ import java.time.format.DateTimeFormatter
 import kotlinx.coroutines.runBlocking
 
 /**
+ *
  * TaskWidgetItemFactory
  *
  * ─────────────────────────────────────────────────────────────────────────────
+ *
  * RemoteViewsFactory that populates the widget's ListView with pending tasks
+ *
  * (and calendar events) from Room.
  *
  * Key design notes:
@@ -28,39 +31,52 @@ import kotlinx.coroutines.runBlocking
  * Use a direct suspend DAO query, not a Flow.
  *
  * [RemoteViewsFactory.onDataSetChanged] runs on a background thread managed
+ *
  * by the AppWidgetService framework. The framework imposes a hard timeout on
+ *
  * how long it waits for [getViewAt] to return a view. If [onDataSetChanged]
+ *
  * takes too long (e.g. because Flow collection adds overhead), the framework
+ *
  * shows its built-in "Loading…" placeholder for every row even though
+ *
  * [getCount] already returned the correct count.
  *
  * Using [TaskDao.getPendingTasksForUser] (a plain suspend query) instead of
+ *
  * observePendingTasksForUser(...).first() eliminates the Flow overhead and
+ *
  * makes [onDataSetChanged] return as fast as possible.
  *
  * Provide a real [getLoadingView].
  *
  * Returning null from [getLoadingView] tells Android to use its own default
+ *
  * loading placeholder — the grey "Loading…" text. Returning the actual row
+ *
  * layout (with blank text) ensures the widget always shows the correct view
+ *
  * type and prevents the default placeholder from ever appearing.
  *
  * runBlocking is intentional.
  *
  * [onDataSetChanged] is always called on a background thread by the framework;
+ *
  * blocking that thread while Room returns data is the correct pattern.
  *
  * Event rows (status == "event").
  *
  * Calendar events created from the widget are stored as TaskEntity rows with
+ *
  * status = "event". They are rendered with:
  *
  * The event title (no emoji prefix).
  *
  * A date chip below the title showing the smart-formatted date:
  *
- *   "Today, 13:37"  /  "Tomorrow, 09:30"  /  "Feb 14, 09:30"
- *   "Today"  /  "Tomorrow"  /  "Feb 14"   (all-day, stored at UTC midnight)
+ * "Today, 13:37" / "Tomorrow, 09:30" / "Feb 14, 09:30"
+ *
+ * "Today" / "Tomorrow" / "Feb 14" (all-day, stored at UTC midnight)
  *
  * A calendar icon (widget_ic_calendar) next to the date chip.
  *
@@ -137,7 +153,7 @@ class TaskWidgetItemFactory(
         rv.setInt(R.id.widget_item_pin, "setColorFilter", pinColor)
 
         // ── Completion checkbox ───────────────────────────────────────────────
-        rv.setImageViewResource(R.id.widget_item_dot, R.drawable.widget_checkbox_glow)
+        rv.setImageViewResource(R.id.widget_item_dot, getCheckboxDrawableRes(task))
 
         // ── Date chip (below title) ───────────────────────────────────────────
         val dueDate: Long? = task.dueDate
@@ -167,11 +183,15 @@ class TaskWidgetItemFactory(
     }
 
     /**
+     *
      * Returns the actual row layout with blank text as the loading placeholder.
      *
-     * Returning `null` here causes Android to show its own built-in "Loading…"
+     * Returning null here causes Android to show its own built-in "Loading…"
+     *
      * grey text for every row while [onDataSetChanged] is running. By returning
+     *
      * the real row layout (with empty fields) we ensure the correct view type is
+     *
      * always used and the "Loading…" placeholder never appears.
      */
     override fun getLoadingView(): RemoteViews = buildLoadingView()
@@ -186,13 +206,17 @@ class TaskWidgetItemFactory(
     // ── Private helpers ───────────────────────────────────────────────────────
 
     /**
+     *
      * Synchronously loads pending tasks and calendar events from Room using a
+     *
      * direct one-shot suspend query ([TaskDao.getPendingTasksForUser]).
      *
      * Ordered: pinned first, then urgent, then by creation date descending —
+     *
      * matching the in-app task list sort order.
      *
      * The app always uses "local_user" as the userId (no Google sign-in
+     *
      * persists a different ID), so this is hardcoded for simplicity.
      */
     private fun loadTasks() {
@@ -204,17 +228,24 @@ class TaskWidgetItemFactory(
     }
 
     /**
+     *
      * Formats a dueDate epoch millis value for display in the widget row.
      *
      * All-day detection: if the stored millis falls exactly on UTC midnight
+     *
      * (hour == 0, minute == 0, second == 0 in UTC), the event was stored as
+     *
      * all-day and only the date portion is shown.
      *
      * Relative labels:
-     *   - Today     → "Today" or "Today, HH:mm"
-     *   - Tomorrow  → "Tomorrow" or "Tomorrow, HH:mm"
-     *   - Yesterday → "Yesterday" or "Yesterday, HH:mm"
-     *   - Other     → "MMM d" or "MMM d, HH:mm"
+     *
+     * Today → "Today" or "Today, HH:mm"
+     *
+     * Tomorrow → "Tomorrow" or "Tomorrow, HH:mm"
+     *
+     * Yesterday → "Yesterday" or "Yesterday, HH:mm"
+     *
+     * Other → "MMM d" or "MMM d, HH:mm"
      */
     private fun formatDueDate(epochMillis: Long): String {
         val zoneId = ZoneId.systemDefault()
@@ -252,4 +283,12 @@ class TaskWidgetItemFactory(
             rv.setViewVisibility(R.id.widget_item_pin, View.GONE)
             rv.setViewVisibility(R.id.widget_item_calendar, View.GONE)
         }
+
+    private fun getCheckboxDrawableRes(task: TaskEntity): Int {
+        return when {
+            task.isUrgent -> R.drawable.widget_checkbox_glow_urgent
+            task.isPinned -> R.drawable.widget_checkbox_glow_pinned
+            else -> R.drawable.widget_checkbox_glow
+        }
+    }
 }
