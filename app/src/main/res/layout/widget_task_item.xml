@@ -5,17 +5,15 @@
     Single task row for the Life Architect 2 home screen widget.
 
     Layout (matches in-app TaskItem style):
-
     ┌──────────────────────────────────────────────────────────────────┐
-    │ [ ] Task title                                      🚩      📌 │
-    │     Feb 14, 09:30                                  🗓          │
+    │ [ ] Task title 🚩 📌                                             │
+    │ Feb 14, 09:30 🗓                                                 │
     └──────────────────────────────────────────────────────────────────┘
 
     The date row is hidden for tasks with no dueDate.
     The calendar icon is hidden for normal tasks; shown for events.
 
-    Place at:
-    app/src/main/res/layout/widget_task_item.xml
+    Place at: app/src/main/res/layout/widget_task_item.xml
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_item_root"
@@ -37,7 +35,7 @@
         android:layout_height="20dp"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="12dp"
-        android:src="@drawable/widget_checkbox_unchecked"
+        android:src="@drawable/widget_checkbox_glow"
         android:contentDescription="Complete task" />
 
     <!-- Title + date stacked vertically, takes remaining width -->
@@ -109,5 +107,4 @@
         android:src="@drawable/widget_ic_pin"
         android:contentDescription="Toggle pin"
         android:visibility="visible" />
-
 </LinearLayout>

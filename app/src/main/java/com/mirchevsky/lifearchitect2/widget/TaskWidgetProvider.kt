@@ -256,6 +256,7 @@ class TaskWidgetProvider : AppWidgetProvider() {
         val colorBrandGreen = context.getColor(R.color.widget_accent_green)
         val isGlowActive = isGlowActive(context)
         val titleColor = if (isGlowActive) blendTowardWhite(colorBrandGreen, 0.62f) else colorBrandGreen
+        rv.setImageViewResource(R.id.widget_item_dot, R.drawable.widget_checkbox_glow)
 
         val safeTitle = BidiFormatter.getInstance().unicodeWrap(task.title)
         rv.setTextViewText(R.id.widget_item_title, safeTitle)

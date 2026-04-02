@@ -3,15 +3,13 @@
     widget_task_item_urgent_pinned.xml
     ─────────────────────────────────────────────────────────────────────────
     Single task row for tasks that are BOTH urgent AND pinned.
-
     Structurally identical to widget_task_item.xml. Separate layout resource
     ID keeps the launcher's RemoteCollectionItems recycler from handing a
     tinted view to a different-state row.
 
     Place at: app/src/main/res/layout/widget_task_item_urgent_pinned.xml
 -->
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_item_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -30,7 +28,7 @@
         android:layout_height="20dp"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="12dp"
-        android:src="@drawable/widget_checkbox_unchecked"
+        android:src="@drawable/widget_checkbox_glow"
         android:contentDescription="Complete task" />
 
     <LinearLayout
@@ -76,9 +74,7 @@
                 android:src="@drawable/widget_ic_calendar"
                 android:contentDescription="Calendar event"
                 android:visibility="gone" />
-
         </LinearLayout>
-
     </LinearLayout>
 
     <ImageView
@@ -99,5 +95,4 @@
         android:src="@drawable/widget_ic_pin"
         android:contentDescription="Toggle pin"
         android:visibility="visible" />
-
 </LinearLayout>

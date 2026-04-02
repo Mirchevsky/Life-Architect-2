@@ -1,8 +1,11 @@
 package com.mirchevsky.lifearchitect2.ui.composables
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +26,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Flag
 import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.Flag
@@ -31,8 +35,6 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.CheckboxDefaults
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -48,12 +50,14 @@ import androidx.compose.material3.rememberDatePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
@@ -117,8 +121,8 @@ import java.time.format.DateTimeFormatter
  *
  * @param onUpdateDueDate Called when the due date/time changes. Receives the old millis
  *
- *                  (nullable) and the new millis so the ViewModel can decide
- *                  whether to delete+recreate or update the calendar event.
+ *              (nullable) and the new millis so the ViewModel can decide
+ *              whether to delete+recreate or update the calendar event.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -222,15 +226,7 @@ fun TaskItem(
                 .padding(start = 4.dp, end = 4.dp, top = 8.dp, bottom = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Checkbox(
-                checked = false,
-                onCheckedChange = null,
-                modifier = Modifier.size(36.dp),
-                colors = CheckboxDefaults.colors(
-                    uncheckedColor = inactiveActionTint,
-                    checkedColor = MaterialTheme.colorScheme.primary
-                )
-            )
+            AnimatedCompletionGlowBox(modifier = Modifier.size(36.dp))
             Spacer(modifier = Modifier.width(4.dp))
 
             Column(modifier = Modifier.weight(1f)) {
@@ -573,6 +569,54 @@ fun TaskItem(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun AnimatedCompletionGlowBox(modifier: Modifier = Modifier) {
+    val infinite = androidx.compose.animation.core.rememberInfiniteTransition(label = "taskCompletionGlow")
+    val pulse by infinite.animateFloat(
+        initialValue = 0.72f,
+        targetValue = 1f,
+        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+            animation = tween(durationMillis = 1800),
+            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+        ),
+        label = "taskCompletionGlowPulse"
+    )
+    val primary = MaterialTheme.colorScheme.primary
+    val shape = RoundedCornerShape(6.dp)
+
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(28.dp)
+                .padding(2.dp)
+                .drawBehind {
+                    drawCircle(
+                        color = primary.copy(alpha = 0.18f * pulse),
+                        radius = size.minDimension * 0.64f
+                    )
+                }
+        )
+        Box(
+            modifier = Modifier
+                .size(20.dp)
+                .clip(shape)
+                .background(primary.copy(alpha = 0.22f + (0.08f * pulse)))
+                .border(width = 1.5.dp, color = primary, shape = shape),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Filled.Check,
+                contentDescription = null,
+                tint = primary.copy(alpha = 0.92f),
+                modifier = Modifier.size(13.dp)
+            )
         }
     }
 }

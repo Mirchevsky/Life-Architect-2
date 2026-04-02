@@ -28,6 +28,8 @@
 
     <!-- Accent green (Add button background) -->
     <color name="widget_accent_green">#10B981</color>
+    <color name="widget_checkbox_fill">#4710B981</color>
+    <color name="widget_checkbox_glow_halo">#5210B981</color>
 
     <!-- Accent purple (Calendar button background) -->
     <color name="widget_accent_purple">#7C3AED</color>

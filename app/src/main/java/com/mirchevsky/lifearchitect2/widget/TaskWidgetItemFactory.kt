@@ -9,55 +9,66 @@ import androidx.core.content.ContextCompat
 import com.mirchevsky.lifearchitect2.R
 import com.mirchevsky.lifearchitect2.data.db.AppDatabase
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
-import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
+import kotlinx.coroutines.runBlocking
 
 /**
  * TaskWidgetItemFactory
+ *
  * ─────────────────────────────────────────────────────────────────────────────
  * RemoteViewsFactory that populates the widget's ListView with pending tasks
  * (and calendar events) from Room.
  *
  * Key design notes:
  *
- * 1. **Use a direct suspend DAO query, not a Flow.**
- *    [RemoteViewsFactory.onDataSetChanged] runs on a background thread managed
- *    by the AppWidgetService framework. The framework imposes a hard timeout on
- *    how long it waits for [getViewAt] to return a view. If [onDataSetChanged]
- *    takes too long (e.g. because Flow collection adds overhead), the framework
- *    shows its built-in "Loading…" placeholder for every row even though
- *    [getCount] already returned the correct count.
+ * Use a direct suspend DAO query, not a Flow.
  *
- *    Using [TaskDao.getPendingTasksForUser] (a plain `suspend` query) instead of
- *    `observePendingTasksForUser(...).first()` eliminates the Flow overhead and
- *    makes [onDataSetChanged] return as fast as possible.
+ * [RemoteViewsFactory.onDataSetChanged] runs on a background thread managed
+ * by the AppWidgetService framework. The framework imposes a hard timeout on
+ * how long it waits for [getViewAt] to return a view. If [onDataSetChanged]
+ * takes too long (e.g. because Flow collection adds overhead), the framework
+ * shows its built-in "Loading…" placeholder for every row even though
+ * [getCount] already returned the correct count.
  *
- * 2. **Provide a real [getLoadingView].**
- *    Returning `null` from [getLoadingView] tells Android to use its own default
- *    loading placeholder — the grey "Loading…" text. Returning the actual row
- *    layout (with blank text) ensures the widget always shows the correct view
- *    type and prevents the default placeholder from ever appearing.
+ * Using [TaskDao.getPendingTasksForUser] (a plain suspend query) instead of
+ * observePendingTasksForUser(...).first() eliminates the Flow overhead and
+ * makes [onDataSetChanged] return as fast as possible.
  *
- * 3. **runBlocking is intentional.**
- *    [onDataSetChanged] is always called on a background thread by the framework;
- *    blocking that thread while Room returns data is the correct pattern.
+ * Provide a real [getLoadingView].
  *
- * 4. **Event rows (status == "event").**
- *    Calendar events created from the widget are stored as TaskEntity rows with
- *    status = "event". They are rendered with:
- *    - The event title (no emoji prefix).
- *    - A date chip below the title showing the smart-formatted date:
- *        "Today, 13:37"  /  "Tomorrow, 09:30"  /  "Feb 14, 09:30"
- *        "Today"  /  "Tomorrow"  /  "Feb 14"   (all-day, stored at UTC midnight)
- *    - A calendar icon (widget_ic_calendar) next to the date chip.
- *    - Flag and pin icons are always shown (same as regular tasks).
+ * Returning null from [getLoadingView] tells Android to use its own default
+ * loading placeholder — the grey "Loading…" text. Returning the actual row
+ * layout (with blank text) ensures the widget always shows the correct view
+ * type and prevents the default placeholder from ever appearing.
+ *
+ * runBlocking is intentional.
+ *
+ * [onDataSetChanged] is always called on a background thread by the framework;
+ * blocking that thread while Room returns data is the correct pattern.
+ *
+ * Event rows (status == "event").
+ *
+ * Calendar events created from the widget are stored as TaskEntity rows with
+ * status = "event". They are rendered with:
+ *
+ * The event title (no emoji prefix).
+ *
+ * A date chip below the title showing the smart-formatted date:
+ *
+ *   "Today, 13:37"  /  "Tomorrow, 09:30"  /  "Feb 14, 09:30"
+ *   "Today"  /  "Tomorrow"  /  "Feb 14"   (all-day, stored at UTC midnight)
+ *
+ * A calendar icon (widget_ic_calendar) next to the date chip.
+ *
+ * Flag and pin icons are always shown (same as regular tasks).
  *
  * Place at:
- *   app/src/main/java/com/mirchevsky/lifearchitect2/widget/TaskWidgetItemFactory.kt
+ *
+ * app/src/main/java/com/mirchevsky/lifearchitect2/widget/TaskWidgetItemFactory.kt
  */
 class TaskWidgetItemFactory(
     private val context: Context,
@@ -68,11 +79,11 @@ class TaskWidgetItemFactory(
 
     // Colours resolved from @color resources — automatically picks light or dark
     // variant based on system night-mode. No hardcoded values.
-    private val colorUrgent  by lazy { ContextCompat.getColor(context, R.color.widget_urgent) }
-    private val colorPinned  by lazy { ContextCompat.getColor(context, R.color.widget_pinned) }
+    private val colorUrgent by lazy { ContextCompat.getColor(context, R.color.widget_urgent) }
+    private val colorPinned by lazy { ContextCompat.getColor(context, R.color.widget_pinned) }
     private val colorPrimary by lazy { ContextCompat.getColor(context, R.color.widget_text_primary) }
     private val colorDefault by lazy { ContextCompat.getColor(context, R.color.widget_icon_inactive) }
-    private val colorPurple  by lazy { ContextCompat.getColor(context, R.color.widget_accent_purple) }
+    private val colorPurple by lazy { ContextCompat.getColor(context, R.color.widget_accent_purple) }
 
     // ── Factory lifecycle ─────────────────────────────────────────────────────
 
@@ -111,7 +122,7 @@ class TaskWidgetItemFactory(
         val titleColor = when {
             task.isUrgent -> colorUrgent
             task.isPinned -> colorPinned
-            else          -> colorPrimary
+            else -> colorPrimary
         }
         rv.setTextColor(R.id.widget_item_title, titleColor)
 
@@ -125,13 +136,8 @@ class TaskWidgetItemFactory(
         val pinColor = if (task.isPinned) colorPinned else colorDefault
         rv.setInt(R.id.widget_item_pin, "setColorFilter", pinColor)
 
-        // ── Checkbox / dot tint ───────────────────────────────────────────────
-        val dotColor = when {
-            task.isUrgent -> colorUrgent
-            task.isPinned -> colorPinned
-            else          -> colorDefault
-        }
-        rv.setInt(R.id.widget_item_dot, "setColorFilter", dotColor)
+        // ── Completion checkbox ───────────────────────────────────────────────
+        rv.setImageViewResource(R.id.widget_item_dot, R.drawable.widget_checkbox_glow)
 
         // ── Date chip (below title) ───────────────────────────────────────────
         val dueDate: Long? = task.dueDate
@@ -171,8 +177,10 @@ class TaskWidgetItemFactory(
     override fun getLoadingView(): RemoteViews = buildLoadingView()
 
     override fun getViewTypeCount(): Int = 1
+
     override fun getItemId(position: Int): Long =
         tasks.getOrNull(position)?.id?.hashCode()?.toLong() ?: position.toLong()
+
     override fun hasStableIds(): Boolean = true
 
     // ── Private helpers ───────────────────────────────────────────────────────
@@ -209,19 +217,19 @@ class TaskWidgetItemFactory(
      *   - Other     → "MMM d" or "MMM d, HH:mm"
      */
     private fun formatDueDate(epochMillis: Long): String {
-        val zoneId   = ZoneId.systemDefault()
-        val instant  = Instant.ofEpochMilli(epochMillis)
-        val zdt      = instant.atZone(zoneId)
+        val zoneId = ZoneId.systemDefault()
+        val instant = Instant.ofEpochMilli(epochMillis)
+        val zdt = instant.atZone(zoneId)
 
         // All-day detection: UTC midnight means the event was stored as all-day.
-        val utcZdt   = instant.atZone(ZoneOffset.UTC)
+        val utcZdt = instant.atZone(ZoneOffset.UTC)
         val isAllDay = utcZdt.hour == 0 && utcZdt.minute == 0 && utcZdt.second == 0
 
-        val today     = LocalDate.now(zoneId)
+        val today = LocalDate.now(zoneId)
         val eventDate = zdt.toLocalDate()
 
         val dateLabel = when (eventDate) {
-            today            -> "Today"
+            today -> "Today"
             today.plusDays(1) -> "Tomorrow"
             today.minusDays(1) -> "Yesterday"
             else -> eventDate.format(DateTimeFormatter.ofPattern("MMM d"))
