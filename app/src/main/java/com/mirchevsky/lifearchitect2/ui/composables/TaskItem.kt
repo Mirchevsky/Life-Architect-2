@@ -120,8 +120,8 @@ import java.time.format.DateTimeFormatter
  *
  * @param onUpdateDueDate Called when the due date/time changes. Receives the old millis
  *
- *         (nullable) and the new millis so the ViewModel can decide
- *         whether to delete+recreate or update the calendar event.
+ *    (nullable) and the new millis so the ViewModel can decide
+ *    whether to delete+recreate or update the calendar event.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -188,7 +188,11 @@ fun TaskItem(
     }
 
     // ── Title colour ────────────────────────────────────────────────────────
-    val titleColor: Color = MaterialTheme.colorScheme.primary
+    val titleColor: Color = if (isSystemInDarkTheme()) {
+        colorResource(id = R.color.white)
+    } else {
+        colorResource(id = R.color.black)
+    }
     val inactiveActionTint = if (isSystemInDarkTheme()) {
         colorResource(id = R.color.white)
     } else {
@@ -442,7 +446,7 @@ fun TaskItem(
         }
     }
 
-    // ── Time picker dialog ─────────────────────────────────────────────────
+    // ── Time picker dialog ────────────────────────────────────────────────
     if (showTimePicker) {
         Dialog(
             onDismissRequest = { showTimePicker = false },

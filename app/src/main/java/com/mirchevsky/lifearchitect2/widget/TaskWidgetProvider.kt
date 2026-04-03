@@ -253,9 +253,11 @@ class TaskWidgetProvider : AppWidgetProvider() {
 
         val rv = RemoteViews(context.packageName, layoutRes)
         val colorIconInactive = context.getColor(R.color.widget_icon_inactive)
-        val colorBrandGreen = context.getColor(R.color.widget_accent_green)
         val isGlowActive = isGlowActive(context)
-        val titleColor = if (isGlowActive) blendTowardWhite(colorBrandGreen, 0.62f) else colorBrandGreen
+        val isDarkTheme =
+            (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
+                    android.content.res.Configuration.UI_MODE_NIGHT_YES
+        val titleColor = if (isDarkTheme) context.getColor(R.color.white) else context.getColor(R.color.black)
         rv.setImageViewResource(
             R.id.widget_item_dot,
             getCheckboxDrawableRes(task)
