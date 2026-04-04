@@ -1,35 +1,29 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    widget_task_item_urgent_pinned.xml
-    ─────────────────────────────────────────────────────────────────────────
-    Single task row for tasks that are BOTH urgent AND pinned.
-    Structurally identical to widget_task_item.xml. Separate layout resource
-    ID keeps the launcher's RemoteCollectionItems recycler from handing a
-    tinted view to a different-state row.
+<!-- widget_task_item_urgent_pinned.xml
+     Single task row for tasks that are BOTH urgent AND pinned.
+     Structurally identical to widget_task_item.xml.
+     Separate layout resource keeps RemoteViews recycling deterministic for this combined style state.
 
-    Place at: app/src/main/res/layout/widget_task_item_urgent_pinned.xml
--->
+     Place at: app/src/main/res/layout/widget_task_item_urgent_pinned.xml -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_item_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:layoutDirection="ltr"
     android:gravity="center_vertical"
+    android:paddingStart="8dp"
+    android:paddingEnd="2dp"
     android:background="@drawable/widget_item_bg"
-    android:paddingTop="10dp"
-    android:paddingBottom="10dp"
-    android:layout_marginBottom="6dp"
-    android:minHeight="48dp">
+    android:minHeight="52dp">
 
     <ImageView
         android:id="@+id/widget_item_dot"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="12dp"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_marginEnd="8dp"
         android:src="@drawable/widget_checkbox_glow"
-        android:contentDescription="Complete task" />
+        android:contentDescription="Task status"
+        android:visibility="visible" />
 
     <LinearLayout
         android:layout_width="0dp"
@@ -39,15 +33,12 @@
 
         <TextView
             android:id="@+id/widget_item_title"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/widget_text_primary"
-            android:textSize="13sp"
+            android:textSize="14sp"
             android:maxLines="1"
-            android:ellipsize="end"
-            android:gravity="left|center_vertical"
-            android:textAlignment="gravity"
-            android:textDirection="firstStrong" />
+            android:ellipsize="end" />
 
         <LinearLayout
             android:id="@+id/widget_item_date_row"
@@ -79,8 +70,8 @@
 
     <ImageView
         android:id="@+id/widget_item_flag"
-        android:layout_width="26dp"
-        android:layout_height="26dp"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
         android:layout_marginStart="-5dp"
         android:src="@drawable/widget_ic_flag"
         android:contentDescription="Toggle urgent"
@@ -88,8 +79,8 @@
 
     <ImageView
         android:id="@+id/widget_item_pin"
-        android:layout_width="26dp"
-        android:layout_height="26dp"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
         android:layout_marginStart="10dp"
         android:layout_marginEnd="10dp"
         android:src="@drawable/widget_ic_pin"

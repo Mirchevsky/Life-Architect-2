@@ -26,8 +26,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Flag
-import androidx.compose.material.icons.filled.PushPin
 import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.Button
@@ -106,9 +104,9 @@ import java.time.format.DateTimeFormatter
  *
  * popup after the change is confirmed.
  *
- * Flag icon → toggles [TaskEntity.isUrgent]. Filled red when urgent.
+ * Flag icon → toggles [TaskEntity.isUrgent]. Outlined icon tinted red when urgent.
  *
- * Pin icon → toggles [TaskEntity.isPinned]. Filled amber when pinned.
+ * Pin icon → toggles [TaskEntity.isPinned]. Outlined icon tinted amber when pinned.
  *
  * Title colour is always the app primary green for this surface.
  *
@@ -314,7 +312,7 @@ fun TaskItem(
                 modifier = Modifier.size(36.dp)
             ) {
                 Icon(
-                    imageVector = if (task.isUrgent) Icons.Filled.Flag else Icons.Outlined.Flag,
+                    imageVector = Icons.Outlined.Flag,
                     contentDescription = if (task.isUrgent) "Remove urgent" else "Mark urgent",
                     tint = if (task.isUrgent) MaterialTheme.colorScheme.error
                     else inactiveActionTint,
@@ -327,7 +325,7 @@ fun TaskItem(
                 modifier = Modifier.size(36.dp)
             ) {
                 Icon(
-                    imageVector = if (task.isPinned) Icons.Filled.PushPin else Icons.Outlined.PushPin,
+                    imageVector = Icons.Outlined.PushPin,
                     contentDescription = if (task.isPinned) "Unpin task" else "Pin task to top",
                     tint = if (task.isPinned) BrandAmber
                     else inactiveActionTint,

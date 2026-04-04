@@ -1,44 +1,40 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    widget_task_item.xml
-    ─────────────────────────────────────────────────────────────────────────
-    Single task row for the Life Architect 2 home screen widget.
+<!-- widget_task_item.xml
+     Single task row for the Life Architect 2 home screen widget.
 
-    Layout (matches in-app TaskItem style):
-    ┌──────────────────────────────────────────────────────────────────┐
-    │ [ ] Task title 🚩 📌                                             │
-    │ Feb 14, 09:30 🗓                                                 │
-    └──────────────────────────────────────────────────────────────────┘
+     Layout (matches in-app TaskItem style):
+     ┌─────────────────────────────────────────────────────────────┐
+     │ [ ] Task title 🚩 📌                                       │
+     │ Mar 29, 22:00 📅                                           │
+     └─────────────────────────────────────────────────────────────┘
 
-    The date row is hidden for tasks with no dueDate.
-    The calendar icon is hidden for normal tasks; shown for events.
+     Notes:
+     - All children are RemoteViews-safe.
+     - Root and spacing align with header action icons in widget_task_list.xml.
 
-    Place at: app/src/main/res/layout/widget_task_item.xml
--->
+     Place at: app/src/main/res/layout/widget_task_item.xml -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_item_root"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="horizontal"
-    android:layoutDirection="ltr"
     android:gravity="center_vertical"
+    android:paddingStart="8dp"
+    android:paddingEnd="2dp"
     android:background="@drawable/widget_item_bg"
-    android:paddingTop="10dp"
-    android:paddingBottom="10dp"
-    android:layout_marginBottom="6dp"
-    android:minHeight="48dp">
+    android:minHeight="52dp">
 
-    <!-- Checkbox -->
+    <!-- Checkbox / completion indicator -->
     <ImageView
         android:id="@+id/widget_item_dot"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginEnd="12dp"
+        android:layout_width="18dp"
+        android:layout_height="18dp"
+        android:layout_marginEnd="8dp"
         android:src="@drawable/widget_checkbox_glow"
-        android:contentDescription="Complete task" />
+        android:contentDescription="Task status"
+        android:visibility="visible" />
 
-    <!-- Title + date stacked vertically, takes remaining width -->
+    <!-- Text column -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -47,17 +43,14 @@
 
         <TextView
             android:id="@+id/widget_item_title"
-            android:layout_width="match_parent"
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:textColor="@color/widget_accent_green"
-            android:textSize="13sp"
+            android:textSize="14sp"
             android:maxLines="1"
-            android:ellipsize="end"
-            android:gravity="left|center_vertical"
-            android:textAlignment="gravity"
-            android:textDirection="firstStrong" />
+            android:ellipsize="end" />
 
-        <!-- Date row: date text + optional calendar icon, hidden when no date -->
+        <!-- Date row -->
         <LinearLayout
             android:id="@+id/widget_item_date_row"
             android:layout_width="wrap_content"
@@ -90,8 +83,8 @@
     <!-- Flag icon — always visible -->
     <ImageView
         android:id="@+id/widget_item_flag"
-        android:layout_width="26dp"
-        android:layout_height="26dp"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
         android:layout_marginStart="-5dp"
         android:src="@drawable/widget_ic_flag"
         android:contentDescription="Toggle urgent"
@@ -100,8 +93,8 @@
     <!-- Pin icon — always visible -->
     <ImageView
         android:id="@+id/widget_item_pin"
-        android:layout_width="26dp"
-        android:layout_height="26dp"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
         android:layout_marginStart="10dp"
         android:layout_marginEnd="10dp"
         android:src="@drawable/widget_ic_pin"

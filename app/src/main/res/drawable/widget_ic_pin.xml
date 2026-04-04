@@ -1,16 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    widget_ic_pin.xml
-    Push-pin icon used in the widget task row for pinned tasks.
-    Tinted amber (#F59E0B) at runtime via RemoteViews.setInt("setColorFilter").
-    Place at: app/src/main/res/drawable/widget_ic_pin.xml
--->
+<!-- widget_ic_pin.xml
+     Outlined Material-style push-pin icon used in the widget task row.
+     Tinted at runtime via RemoteViews.setInt("setColorFilter") for inactive/pinned states. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
+
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M16,12V4h1V2H7v2h1v8l-2,2v2h5.2v6h1.6v-6H18v-2z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M14,4V2H6V4H7V9L5,11V12H10V19H12V12H17V11L15,9V4H14ZM7.83,10L9,8.83V4H13V8.83L14.17,10H7.83Z" />
 </vector>

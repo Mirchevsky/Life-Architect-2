@@ -1,16 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    widget_ic_flag.xml
-    Flag icon used in the widget task row for urgent tasks.
-    Tinted red (#E53935) at runtime via RemoteViews.setInt("setColorFilter").
-    Place at: app/src/main/res/drawable/widget_ic_flag.xml
--->
+<!-- widget_ic_flag.xml
+     Outlined Material-style flag icon used in the widget task row.
+     Tinted at runtime via RemoteViews.setInt("setColorFilter") for inactive/urgent states. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
     android:viewportWidth="24"
     android:viewportHeight="24">
+
     <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M14.4,6L14,4H5v17h2v-7h5.6l0.4,2h7V6z" />
+        android:fillColor="#FFFFFFFF"
+        android:pathData="M14,6L13.22,4H5V21H7V14H13.22L14,16H20V6H14ZM18,14H15.39L14.61,12H7V6H11.61L12.39,8H18V14Z" />
 </vector>
