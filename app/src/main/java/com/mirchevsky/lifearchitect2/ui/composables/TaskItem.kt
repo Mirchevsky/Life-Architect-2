@@ -138,7 +138,7 @@ fun TaskItem(
     val isOverdue = dueDate != null && dueDate.isBefore(LocalDate.now())
 
     // ── Inline editing ──────────────────────────────────────────────────────
-    var isEditing by remember { mutableStateOf(false) }
+    var isEditing by remember(task.id) { mutableStateOf(false) }
     var titleFieldValue by remember(task.id) {
         mutableStateOf(TextFieldValue(task.title, selection = TextRange(task.title.length)))
     }
@@ -154,22 +154,23 @@ fun TaskItem(
     }
 
     // ── Date/time picker state ──────────────────────────────────────────────
-    var showDatePicker by remember { mutableStateOf(false) }
-    var showTimePicker by remember { mutableStateOf(false) }
+    var showDatePicker by remember(task.id) { mutableStateOf(false) }
+    var showTimePicker by remember(task.id) { mutableStateOf(false) }
     var pendingDateMillis by remember(task.id) { mutableStateOf(task.dueDate) }
 
     // ── Calendar Updated popup ──────────────────────────────────────────────
-    var showCalendarUpdatedPopup by remember { mutableStateOf(false) }
+    var showCalendarUpdatedPopup by remember(task.id) { mutableStateOf(false) }
 
-    val todayMillis = remember {
-        LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
-    }
+    val todayMillis = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = task.dueDate ?: todayMillis,
         selectableDates = object : SelectableDates {
             override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis >= todayMillis
         }
     )
+    LaunchedEffect(task.id, task.dueDate, todayMillis) {
+        datePickerState.selectedDateMillis = task.dueDate ?: todayMillis
+    }
     var isAllDay by remember(task.id) { mutableStateOf(false) }
     var hour by remember(task.id) {
         mutableStateOf(
