@@ -29,11 +29,13 @@ import com.mirchevsky.lifearchitect2.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 
 /**
+ *
  * Tasks screen — WhatsApp-style layout.
  *
  * Uses [Scaffold] with a bottomBar instead of a Box overlay or Modifier.weight.
  *
  * This keeps [AddTaskItem] docked at the bottom while the [LazyColumn] gets
+ *
  * proper content padding above it.
  *
  * [statusBarsPadding] keeps content below the Android status bar.
@@ -41,6 +43,7 @@ import kotlinx.coroutines.delay
  * [imePadding] allows the bottom input area to rise smoothly with the keyboard.
  *
  * A short [delay] before [animateScrollToItem] gives layout/insets time to settle
+ *
  * so the scroll targets the correct final offset.
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -73,7 +76,7 @@ fun TasksScreen(
     }
 
     // When keyboard opens, wait briefly for layout to settle, then scroll to last item
-    LaunchedEffect(isImeVisible) {
+    LaunchedEffect(isImeVisible, totalItems) {
         if (isImeVisible && totalItems > 0) {
             delay(100)
             listState.animateScrollToItem(index = totalItems - 1)
