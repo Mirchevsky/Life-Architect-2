@@ -1,21 +1,20 @@
 package com.mirchevsky.lifearchitect2.ui.screens
 
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.isImeVisible
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -23,28 +22,26 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.material3.Scaffold
 import com.mirchevsky.lifearchitect2.ui.composables.AddTaskItem
 import com.mirchevsky.lifearchitect2.ui.composables.TaskItem
 import com.mirchevsky.lifearchitect2.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 
 /**
- *
  * Tasks screen — WhatsApp-style layout.
  *
- * Uses a structural [Column] with [Modifier.weight] instead of a [Box] overlay.
+ * Uses [Scaffold] with a bottomBar instead of a Box overlay or Modifier.weight.
  *
- * This means the [LazyColumn] physically stops where [AddTaskItem] begins — no
+ * This keeps [AddTaskItem] docked at the bottom while the [LazyColumn] gets
+ * proper content padding above it.
  *
- * items can ever be hidden behind the card, no manual height math needed.
+ * [statusBarsPadding] keeps content below the Android status bar.
  *
- * [statusBarsPadding] on the root Column pushes content below the Android status bar.
+ * [imePadding] allows the bottom input area to rise smoothly with the keyboard.
  *
- * [imePadding] handles the keyboard inset smoothly when the user is typing.
- *
- * A [delay] of 100 ms before [animateScrollToItem] gives the layout engine time
- *
- * to begin its resize animation so the scroll targets the correct final offset.
+ * A short [delay] before [animateScrollToItem] gives layout/insets time to settle
+ * so the scroll targets the correct final offset.
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -59,15 +56,7 @@ fun TasksScreen(
     val listState = rememberLazyListState()
 
     val isImeVisible = WindowInsets.isImeVisible
-
-// Pinned tasks float to the top; within each group order is preserved.
-// Must be computed here (composable scope) — remember() cannot be called
-// inside a LazyListScope lambda (not a @Composable context).
-    val sortedTasks = remember(uiState.pendingTasks) {
-        uiState.pendingTasks.sortedByDescending { it.isPinned }
-    }
-
-    val totalItems = 1 + uiState.pendingTasks.size
+    val totalItems = uiState.pendingTasks.size
     val glowAmount = remember { Animatable(0f) }
 
     LaunchedEffect(enableOpenGlow) {
@@ -83,7 +72,7 @@ fun TasksScreen(
         }
     }
 
-// When keyboard opens, wait 100 ms for layout to settle then scroll to last item
+    // When keyboard opens, wait briefly for layout to settle, then scroll to last item
     LaunchedEffect(isImeVisible) {
         if (isImeVisible && totalItems > 0) {
             delay(100)
@@ -91,34 +80,44 @@ fun TasksScreen(
         }
     }
 
-// Also scroll when a new task is added (so it is always visible)
+    // Also scroll when a new task is added so it stays visible
     LaunchedEffect(uiState.pendingTasks.size) {
-        val idx = (1 + uiState.pendingTasks.size) - 1
+        val idx = uiState.pendingTasks.size - 1
         if (idx >= 0) {
             delay(50)
             listState.animateScrollToItem(index = idx)
         }
     }
 
-    Column(
+    Scaffold(
         modifier = Modifier
             .fillMaxSize()
-// Push content below the Android status bar
-            .statusBarsPadding()
-// Smoothly follows keyboard edge when open; clears nav bar when closed
-            .imePadding()
-    ) {
-
+            .statusBarsPadding(),
+        bottomBar = {
+            AddTaskItem(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .imePadding()
+                    .padding(horizontal = 16.dp)
+                    .padding(top = 8.dp, bottom = 6.dp),
+                onAddTask = { title, difficulty, dueDate ->
+                    viewModel.onAddTask(title, difficulty, dueDate)
+                },
+                requestFocus = focusAddTask,
+                onFocusConsumed = onFocusHandled
+            )
+        }
+    ) { innerPadding ->
         LazyColumn(
             state = listState,
             modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)  // fills all space above AddTaskItem; shrinks when keyboard opens
+                .fillMaxSize()
+                .padding(innerPadding)
                 .padding(horizontal = 16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp),
             contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp)
         ) {
-            items(sortedTasks, key = { it.id }) { task ->
+            items(uiState.pendingTasks, key = { it.id }) { task ->
                 TaskItem(
                     task = task,
                     onCompleted = { viewModel.onTaskCompleted(task) },
@@ -130,18 +129,5 @@ fun TasksScreen(
                 )
             }
         }
-
-        // Input card docked structurally below the list — never overlaps
-        AddTaskItem(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp)
-                .padding(top = 8.dp, bottom = 6.dp),
-            onAddTask = { title, difficulty, dueDate ->
-                viewModel.onAddTask(title, difficulty, dueDate)
-            },
-            requestFocus = focusAddTask,
-            onFocusConsumed = onFocusHandled
-        )
     }
 }

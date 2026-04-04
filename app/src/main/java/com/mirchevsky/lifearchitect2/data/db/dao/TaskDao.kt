@@ -31,12 +31,19 @@ interface TaskDao {
 
     /**
      * Observes all pending (not completed) tasks for a specific user.
+     *
      * Filters on the [TaskEntity.isCompleted] boolean column for reliability.
      *
      * @param userId The ID of the user whose pending tasks are to be observed.
      * @return A [Flow] emitting a list of pending [TaskEntity] for the user.
      */
-    @Query("SELECT * FROM tasks WHERE user_id = :userId AND is_completed = 0 ORDER BY created_at DESC")
+    @Query(
+        """
+        SELECT * FROM tasks
+        WHERE user_id = :userId AND is_completed = 0
+        ORDER BY is_urgent DESC, is_pinned DESC, created_at DESC
+        """
+    )
     fun observePendingTasksForUser(userId: String): Flow<List<TaskEntity>>
 
     /**
@@ -53,19 +60,25 @@ interface TaskDao {
      *
      * Used by [TaskWidgetItemFactory] inside [RemoteViewsFactory.onDataSetChanged],
      * which runs on a background thread managed by the AppWidgetService framework.
+     *
      * A direct suspend query is faster than [observePendingTasksForUser] because it
      * avoids Flow collection overhead and returns immediately once the cursor is
      * exhausted — preventing the framework's loading-view timeout from firing and
      * leaving the widget stuck on "Loading…" rows.
      *
-     * Ordered to match the in-app task list: pinned first, then by creation
-     * date descending. Urgent tasks are NOT sorted to the top — urgency only
-     * changes the visual appearance of a row, not its position.
+     * Ordered to match the in-app task list and widget:
+     * urgent first, then pinned, then by creation date descending.
      *
      * @param userId The ID of the user whose pending tasks are to be fetched.
      * @return A list of pending [TaskEntity] for the user.
      */
-    @Query("SELECT * FROM tasks WHERE user_id = :userId AND is_completed = 0 ORDER BY is_pinned DESC, created_at DESC")
+    @Query(
+        """
+        SELECT * FROM tasks
+        WHERE user_id = :userId AND is_completed = 0
+        ORDER BY is_urgent DESC, is_pinned DESC, created_at DESC
+        """
+    )
     suspend fun getPendingTasksForUser(userId: String): List<TaskEntity>
 
     /**
