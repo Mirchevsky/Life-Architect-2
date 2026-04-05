@@ -1,10 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- widget_task_item_urgent_pinned.xml
-     Single task row for tasks that are BOTH urgent AND pinned.
-     Structurally identical to widget_task_item.xml.
-     Separate layout resource keeps RemoteViews recycling deterministic for this combined style state.
-
-     Place at: app/src/main/res/layout/widget_task_item_urgent_pinned.xml -->
+     Single task row for tasks that are BOTH urgent AND pinned. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_item_root"
     android:layout_width="match_parent"
@@ -68,22 +64,47 @@
         </LinearLayout>
     </LinearLayout>
 
-    <ImageView
-        android:id="@+id/widget_item_flag"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
-        android:layout_marginStart="-5dp"
-        android:src="@drawable/widget_ic_flag"
-        android:contentDescription="Toggle urgent"
-        android:visibility="visible" />
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
-    <ImageView
-        android:id="@+id/widget_item_pin"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
-        android:layout_marginStart="10dp"
-        android:layout_marginEnd="10dp"
-        android:src="@drawable/widget_ic_pin"
-        android:contentDescription="Toggle pin"
-        android:visibility="visible" />
+        <TextView
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:text=""
+            android:visibility="invisible" />
+
+        <FrameLayout
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="5dp">
+
+            <ImageView
+                android:id="@+id/widget_item_flag"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:src="@drawable/widget_ic_flag"
+                android:contentDescription="Toggle urgent"
+                android:visibility="visible" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="5dp">
+
+            <ImageView
+                android:id="@+id/widget_item_pin"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:src="@drawable/widget_ic_pin"
+                android:contentDescription="Toggle pin"
+                android:visibility="visible" />
+        </FrameLayout>
+    </LinearLayout>
+
 </LinearLayout>

@@ -1,18 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- widget_task_item.xml
-     Single task row for the Life Architect 2 home screen widget.
-
-     Layout (matches in-app TaskItem style):
-     ┌─────────────────────────────────────────────────────────────┐
-     │ [ ] Task title 🚩 📌                                       │
-     │ Mar 29, 22:00 📅                                           │
-     └─────────────────────────────────────────────────────────────┘
-
-     Notes:
-     - All children are RemoteViews-safe.
-     - Root and spacing align with header action icons in widget_task_list.xml.
-
-     Place at: app/src/main/res/layout/widget_task_item.xml -->
+     Single task row for the Life Architect 2 home screen widget. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_item_root"
     android:layout_width="match_parent"
@@ -24,7 +12,6 @@
     android:background="@drawable/widget_item_bg"
     android:minHeight="52dp">
 
-    <!-- Checkbox / completion indicator -->
     <ImageView
         android:id="@+id/widget_item_dot"
         android:layout_width="18dp"
@@ -34,7 +21,6 @@
         android:contentDescription="Task status"
         android:visibility="visible" />
 
-    <!-- Text column -->
     <LinearLayout
         android:layout_width="0dp"
         android:layout_height="wrap_content"
@@ -50,7 +36,6 @@
             android:maxLines="1"
             android:ellipsize="end" />
 
-        <!-- Date row -->
         <LinearLayout
             android:id="@+id/widget_item_date_row"
             android:layout_width="wrap_content"
@@ -68,7 +53,6 @@
                 android:textSize="11sp"
                 android:maxLines="1" />
 
-            <!-- Calendar icon — shown only for event rows -->
             <ImageView
                 android:id="@+id/widget_item_calendar"
                 android:layout_width="12dp"
@@ -80,24 +64,48 @@
         </LinearLayout>
     </LinearLayout>
 
-    <!-- Flag icon — always visible -->
-    <ImageView
-        android:id="@+id/widget_item_flag"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
-        android:layout_marginStart="-5dp"
-        android:src="@drawable/widget_ic_flag"
-        android:contentDescription="Toggle urgent"
-        android:visibility="visible" />
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:gravity="center_vertical">
 
-    <!-- Pin icon — always visible -->
-    <ImageView
-        android:id="@+id/widget_item_pin"
-        android:layout_width="20dp"
-        android:layout_height="20dp"
-        android:layout_marginStart="10dp"
-        android:layout_marginEnd="10dp"
-        android:src="@drawable/widget_ic_pin"
-        android:contentDescription="Toggle pin"
-        android:visibility="visible" />
+        <!-- Invisible mic slot so flag aligns under header calendar button -->
+        <TextView
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:text=""
+            android:visibility="invisible" />
+
+        <FrameLayout
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="5dp">
+
+            <ImageView
+                android:id="@+id/widget_item_flag"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:src="@drawable/widget_ic_flag"
+                android:contentDescription="Toggle urgent"
+                android:visibility="visible" />
+        </FrameLayout>
+
+        <FrameLayout
+            android:layout_width="34dp"
+            android:layout_height="34dp"
+            android:layout_marginStart="5dp">
+
+            <ImageView
+                android:id="@+id/widget_item_pin"
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_gravity="center"
+                android:src="@drawable/widget_ic_pin"
+                android:contentDescription="Toggle pin"
+                android:visibility="visible" />
+        </FrameLayout>
+    </LinearLayout>
+
 </LinearLayout>

@@ -1,7 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- widget_ic_pin.xml
-     Outlined Material-style push-pin icon used in the widget task row.
-     Tinted at runtime via RemoteViews.setInt("setColorFilter") for inactive/pinned states. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
@@ -10,5 +7,5 @@
 
     <path
         android:fillColor="#FFFFFFFF"
-        android:pathData="M14,4V2H6V4H7V9L5,11V12H10V19H12V12H17V11L15,9V4H14ZM7.83,10L9,8.83V4H13V8.83L14.17,10H7.83Z" />
+        android:pathData="M16,12V11L14,9V4H15V2H6V4H7V9L5,11V12H10V19H12V12H16ZM8.83,10L10,8.83V4H11V8.83L12.17,10H8.83Z" />
 </vector>
