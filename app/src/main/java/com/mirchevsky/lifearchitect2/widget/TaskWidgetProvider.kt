@@ -41,9 +41,6 @@ class TaskWidgetProvider : AppWidgetProvider() {
         const val ROW_ACTION_TOGGLE_FLAG = "toggle_flag"
         const val ROW_ACTION_TOGGLE_PIN = "toggle_pin"
 
-        private val COLOR_URGENT = Color.parseColor("#F87171")
-        private val COLOR_PINNED = Color.parseColor("#FBBF24")
-
         fun sendRefreshBroadcast(context: Context) {
             val intent = Intent(ACTION_WIDGET_REFRESH)
                 .setClass(context, TaskWidgetProvider::class.java)
@@ -273,10 +270,8 @@ class TaskWidgetProvider : AppWidgetProvider() {
             if (isGlowActive) 14f else 13f
         )
 
-        val flagTint = if (task.isUrgent) COLOR_URGENT else inactiveFlagPinTint
-        val pinTint = if (task.isPinned) COLOR_PINNED else inactiveFlagPinTint
-        rv.setInt(R.id.widget_item_flag, "setColorFilter", flagTint)
-        rv.setInt(R.id.widget_item_pin, "setColorFilter", pinTint)
+        rv.setInt(R.id.widget_item_flag, "setColorFilter", inactiveFlagPinTint)
+        rv.setInt(R.id.widget_item_pin, "setColorFilter", inactiveFlagPinTint)
 
         val isEvent = task.status == "event"
         rv.setViewVisibility(R.id.widget_item_calendar, if (isEvent) View.VISIBLE else View.GONE)

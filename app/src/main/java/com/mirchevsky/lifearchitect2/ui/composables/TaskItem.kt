@@ -315,8 +315,7 @@ fun TaskItem(
                 Icon(
                     imageVector = Icons.Outlined.Flag,
                     contentDescription = if (task.isUrgent) "Remove urgent" else "Mark urgent",
-                    tint = if (task.isUrgent) MaterialTheme.colorScheme.error
-                    else inactiveActionTint,
+                    tint = inactiveActionTint,
                     modifier = Modifier.size(20.dp)
                 )
             }
@@ -328,8 +327,7 @@ fun TaskItem(
                 Icon(
                     imageVector = Icons.Outlined.PushPin,
                     contentDescription = if (task.isPinned) "Unpin task" else "Pin task to top",
-                    tint = if (task.isPinned) BrandAmber
-                    else inactiveActionTint,
+                    tint = inactiveActionTint,
                     modifier = Modifier.size(20.dp)
                 )
             }
