@@ -63,7 +63,10 @@ import com.mirchevsky.lifearchitect2.ui.viewmodel.MainViewModel
  * @param viewModel The [MainViewModel] shared across all screens.
  */
 @Composable
-fun MainScreen(viewModel: MainViewModel) {
+fun MainScreen(
+    viewModel: MainViewModel,
+    requestedRoute: String = Screen.Tasks.route
+) {
     val navController = rememberNavController()
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val density = LocalDensity.current
@@ -100,6 +103,13 @@ fun MainScreen(viewModel: MainViewModel) {
     Box(modifier = Modifier.fillMaxSize()) {
         LaunchedEffect(Unit) {
             pendingAppOpenGlow = true
+        }
+
+        LaunchedEffect(requestedRoute) {
+            navController.navigate(requestedRoute) {
+                launchSingleTop = true
+                restoreState = true
+            }
         }
 
         Scaffold(

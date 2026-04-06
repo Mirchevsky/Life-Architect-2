@@ -13,6 +13,8 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.core.view.WindowCompat
@@ -24,12 +26,17 @@ import com.google.android.ump.UserMessagingPlatform
 import com.mirchevsky.lifearchitect2.data.Theme
 import com.mirchevsky.lifearchitect2.data.TrendsRepository
 import com.mirchevsky.lifearchitect2.ui.MainScreen
+import com.mirchevsky.lifearchitect2.ui.Screen
 import com.mirchevsky.lifearchitect2.ui.composables.XpPopup
 import com.mirchevsky.lifearchitect2.ui.theme.AppTheme
 import com.mirchevsky.lifearchitect2.ui.viewmodel.MainViewModel
 import com.mirchevsky.lifearchitect2.ui.viewmodel.MainViewModelFactory
 
 class MainActivity : ComponentActivity() {
+    companion object {
+        const val EXTRA_START_SCREEN_ROUTE = "start_screen_route"
+        const val ROUTE_ANALYTICS = "analytics"
+    }
 
     private val repository by lazy { (application as LifeArchitectApplication).repository }
     private val trendsRepository by lazy { TrendsRepository() }
@@ -43,6 +50,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private lateinit var consentInformation: ConsentInformation
+    private var startScreenRoute by mutableStateOf(Screen.Tasks.route)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Enable edge-to-edge BEFORE super.onCreate so the window is configured
@@ -50,6 +58,7 @@ class MainActivity : ComponentActivity() {
         // lets the app draw behind both the status bar and the system navigation bar.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
+        startScreenRoute = resolveStartScreenRoute(intent)
 
         // Tell the window that WE handle system-bar insets (Compose will apply them).
         WindowCompat.setDecorFitsSystemWindows(window, false)
@@ -107,7 +116,10 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     Box(modifier = Modifier.fillMaxSize()) {
-                        MainScreen(viewModel = viewModel)
+                        MainScreen(
+                            viewModel = viewModel,
+                            requestedRoute = startScreenRoute
+                        )
 
                         if (uiState.xpPopupVisible) {
                             XpPopup(
@@ -128,6 +140,19 @@ class MainActivity : ComponentActivity() {
             MobileAds.initialize(this) { initializationStatus ->
                 Log.d("AdMob", "SDK initialized: $initializationStatus")
             }
+        }
+    }
+
+    override fun onNewIntent(intent: android.content.Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        startScreenRoute = resolveStartScreenRoute(intent)
+    }
+
+    private fun resolveStartScreenRoute(intent: android.content.Intent?): String {
+        return when (intent?.getStringExtra(EXTRA_START_SCREEN_ROUTE)) {
+            ROUTE_ANALYTICS -> Screen.Analytics.route
+            else -> Screen.Tasks.route
         }
     }
 }

@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.mirchevsky.lifearchitect2.R
 import com.mirchevsky.lifearchitect2.data.AppRepository
 import com.mirchevsky.lifearchitect2.data.Theme
+import com.mirchevsky.lifearchitect2.data.UserProgressEngine
 import com.mirchevsky.lifearchitect2.data.TrendsRepository
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
 import com.mirchevsky.lifearchitect2.data.db.entity.UserEntity
@@ -20,7 +21,6 @@ import com.mirchevsky.lifearchitect2.widget.TaskWidgetProvider
 import java.time.Instant
 import java.time.LocalDateTime
 import java.time.ZoneId
-import kotlin.math.pow
 import kotlin.random.Random
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -105,8 +105,8 @@ class MainViewModel(
             ) { user, pending, completed ->
                 val level = user?.level ?: 1
                 val xp = user?.xp ?: 0
-                val xpNeededForNextLevel = getXpNeededForLevel(level)
-                val xpNeededForCurrentLevel = getXpNeededForLevel(level - 1)
+                val xpNeededForNextLevel = UserProgressEngine.getXpNeededForLevel(level)
+                val xpNeededForCurrentLevel = UserProgressEngine.getXpNeededForLevel(level - 1)
                 val xpInCurrentLevel = xp - xpNeededForCurrentLevel
                 val totalXpForThisLevel = xpNeededForNextLevel - xpNeededForCurrentLevel
 
@@ -223,35 +223,23 @@ class MainViewModel(
         }
 
         // 9. Increment counters
-        var finalUser = checkLevelUp(
-            userWithStreak.copy(
-                xp = userWithStreak.xp + finalXp,
-                totalXp = userWithStreak.totalXp + finalXp,
-                tasksCompletedToday = userWithStreak.tasksCompletedToday + 1
-            )
+        var finalUser = UserProgressEngine.applyXp(userWithStreak, finalXp).copy(
+            tasksCompletedToday = userWithStreak.tasksCompletedToday + 1
         )
 
         // 10. Weekly streak payout
         val weeklyBonus = checkWeeklyStreakPayout(finalUser)
         if (weeklyBonus > 0) {
-            finalUser = checkLevelUp(
-                finalUser.copy(
-                    xp = finalUser.xp + weeklyBonus,
-                    totalXp = finalUser.totalXp + weeklyBonus,
-                    weeklyStreakClaimed = true
-                )
+            finalUser = UserProgressEngine.applyXp(finalUser, weeklyBonus).copy(
+                weeklyStreakClaimed = true
             )
         }
 
         // 11. Monthly milestone payout
         val monthlyBonus = checkMonthlyMilestone(finalUser)
         if (monthlyBonus > 0) {
-            finalUser = checkLevelUp(
-                finalUser.copy(
-                    xp = finalUser.xp + monthlyBonus,
-                    totalXp = finalUser.totalXp + monthlyBonus,
-                    monthlyMilestoneClaimed = true
-                )
+            finalUser = UserProgressEngine.applyXp(finalUser, monthlyBonus).copy(
+                monthlyMilestoneClaimed = true
             )
         }
 
@@ -531,25 +519,9 @@ class MainViewModel(
         }
     }
 
-    private fun checkLevelUp(user: UserEntity): UserEntity {
-        var current = user
-        while (current.xp >= getXpNeededForLevel(current.level)) {
-            current = current.copy(
-                xp = current.xp - getXpNeededForLevel(current.level),
-                level = current.level + 1
-            )
-        }
-        return current
-    }
-
     // -----------------------------------------------------------------------
     // Rank & Level Helpers
     // -----------------------------------------------------------------------
-
-    private fun getXpNeededForLevel(level: Int): Int {
-        if (level <= 0) return 0
-        return (100 * level.toDouble().pow(1.5)).toInt()
-    }
 
     private fun getRankTitle(level: Int): String = when (level) {
         in 1..4 -> "Novice"

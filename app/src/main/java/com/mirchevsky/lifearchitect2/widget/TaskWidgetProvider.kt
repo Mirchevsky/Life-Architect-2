@@ -13,9 +13,12 @@ import android.provider.Settings
 import android.view.View
 import android.widget.RemoteViews
 import androidx.core.text.BidiFormatter
+import com.mirchevsky.lifearchitect2.MainActivity
 import com.mirchevsky.lifearchitect2.R
+import com.mirchevsky.lifearchitect2.data.UserProgressEngine
 import com.mirchevsky.lifearchitect2.data.db.AppDatabase
 import com.mirchevsky.lifearchitect2.data.db.entity.TaskEntity
+import com.mirchevsky.lifearchitect2.data.db.entity.UserEntity
 import java.time.Instant
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -109,9 +112,11 @@ class TaskWidgetProvider : AppWidgetProvider() {
                 val pendingResult = goAsync()
                 Thread {
                     try {
-                        val dao = AppDatabase.getDatabase(context).taskDao()
+                        val db = AppDatabase.getDatabase(context)
+                        val taskDao = db.taskDao()
+                        val userDao = db.userDao()
                         val task: TaskEntity? = runBlocking {
-                            dao.getPendingTasksForUser("local_user")
+                            taskDao.getPendingTasksForUser("local_user")
                         }.firstOrNull { it.id == taskId }
 
                         var xpGained = 0
@@ -138,7 +143,16 @@ class TaskWidgetProvider : AppWidgetProvider() {
                             }
 
                             if (updated != null) {
-                                runBlocking { dao.upsertTask(updated) }
+                                runBlocking { taskDao.upsertTask(updated) }
+                            }
+
+                            if (rowAction == ROW_ACTION_COMPLETE && xpGained > 0) {
+                                runBlocking {
+                                    val currentUser = userDao.getLocalUserOnce()
+                                        ?: UserEntity(googleId = "local_user")
+                                    val progressedUser = UserProgressEngine.applyXp(currentUser, xpGained)
+                                    userDao.upsertUser(progressedUser)
+                                }
                             }
                         }
 
@@ -190,10 +204,16 @@ class TaskWidgetProvider : AppWidgetProvider() {
                 .taskDao()
                 .getPendingTasksForUser("local_user")
         }
+        val user = runBlocking {
+            AppDatabase.getDatabase(context)
+                .userDao()
+                .getLocalUserOnce()
+        } ?: UserEntity(googleId = "local_user")
 
         val items = buildCollectionItems(context, tasks)
         val rv = RemoteViews(context.packageName, R.layout.widget_task_list)
 
+        bindHeaderProgress(rv, user)
         rv.setRemoteAdapter(R.id.widget_task_list, items)
         rv.setEmptyView(R.id.widget_task_list, R.id.widget_empty_text)
 
@@ -218,8 +238,21 @@ class TaskWidgetProvider : AppWidgetProvider() {
             R.id.widget_btn_add_task,
             getServiceIntent(context, WidgetOverlayService.ACTION_ADD_TASK, appWidgetId, 30)
         )
+        val openAnalyticsIntent = getOpenAnalyticsIntent(context, appWidgetId)
+        rv.setOnClickPendingIntent(R.id.widget_header_identity_container, openAnalyticsIntent)
+        rv.setOnClickPendingIntent(R.id.widget_header_avatar, openAnalyticsIntent)
+        rv.setOnClickPendingIntent(R.id.widget_header_level_xp, openAnalyticsIntent)
+        rv.setOnClickPendingIntent(R.id.widget_header_xp_progress, openAnalyticsIntent)
 
         appWidgetManager.updateAppWidget(appWidgetId, rv)
+    }
+
+    private fun bindHeaderProgress(rv: RemoteViews, user: UserEntity) {
+        val xpNeeded = UserProgressEngine.getXpNeededForLevel(user.level).coerceAtLeast(1)
+        val progress = ((user.xp.toFloat() / xpNeeded.toFloat()) * 100f).toInt().coerceIn(0, 100)
+
+        rv.setTextViewText(R.id.widget_header_level_xp, "Level ${user.level}")
+        rv.setProgressBar(R.id.widget_header_xp_progress, 100, progress, false)
     }
 
     private fun buildCollectionItems(
@@ -389,6 +422,22 @@ class TaskWidgetProvider : AppWidgetProvider() {
         return PendingIntent.getForegroundService(
             context,
             widgetId * 100 + requestOffset,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    private fun getOpenAnalyticsIntent(
+        context: Context,
+        widgetId: Int
+    ): PendingIntent {
+        val intent = Intent(context, MainActivity::class.java).apply {
+            putExtra(MainActivity.EXTRA_START_SCREEN_ROUTE, MainActivity.ROUTE_ANALYTICS)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
+        }
+        return PendingIntent.getActivity(
+            context,
+            widgetId * 100 + 40,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

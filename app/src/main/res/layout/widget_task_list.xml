@@ -1,30 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    widget_task_list.xml
-    ─────────────────────────────────────────────────────────────────────────
-    Main frame layout for the Life Architect 2 task list home screen widget.
-
-    Structure:
-    ┌─────────────────────────────────────────────┐
-    │ Tasks                          [mic] [cal] [+] │ ← header row
-    │─────────────────────────────────────────────│ ← divider
-    │ • Task title                     Mar 29, 22:00 │
-    │ • Task title                                  │ ← ListView rows
-    │ • Task title                     Mar 24, 09:00 │
-    │ …                                               │
-    └─────────────────────────────────────────────┘
-
-    Button order matches AddTaskItem.kt:
-    Mic → Calendar → Add (left to right).
-
-    Colours use @color/widget_* references that resolve to light or dark
-    variants automatically based on the system night-mode setting:
-      res/values/colors_widget.xml        (light mode defaults)
-      res/values-night/colors_widget.xml  (dark mode overrides)
-
-    Place at:
-    app/src/main/res/layout/widget_task_list.xml
--->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/widget_root"
     android:layout_width="match_parent"
@@ -32,15 +6,6 @@
     android:orientation="vertical"
     android:background="@drawable/widget_background">
 
-    <!-- ── Header row ──────────────────────────────────────────────────── -->
-    <!--
-        Two-column header:
-          Left  : "Tasks" title, vertically centred
-          Right : vertical stack — empty spacer on top (aligns with title),
-                  then the three action buttons on the bottom row so that
-                  [calendar] sits on the same horizontal centre-line as the
-                  flag icon in each task row, and [+] on the same line as pin.
-    -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -51,27 +16,62 @@
         android:paddingTop="10dp"
         android:paddingBottom="8dp">
 
-        <!-- Widget title -->
-        <TextView
+        <LinearLayout
+            android:id="@+id/widget_header_identity_container"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Tasks"
-            android:textColor="@color/widget_text_primary"
-            android:textSize="16sp"
-            android:textStyle="bold" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
 
-        <!--
-            Button group — pushed to the bottom of the header so the buttons
-            sit flush with the top task row's icon band.
-        -->
+            <TextView
+                android:id="@+id/widget_header_avatar"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:gravity="center"
+                android:text="U"
+                android:textColor="@color/widget_text_primary"
+                android:textSize="12sp"
+                android:textStyle="bold"
+                android:background="@drawable/widget_avatar_circle" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    android:id="@+id/widget_header_level_xp"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Level 1"
+                    android:textColor="@color/widget_text_primary"
+                    android:textSize="11sp"
+                    android:textStyle="bold"
+                    android:maxLines="1" />
+
+                <ProgressBar
+                    android:id="@+id/widget_header_xp_progress"
+                    style="?android:attr/progressBarStyleHorizontal"
+                    android:layout_width="match_parent"
+                    android:layout_height="4dp"
+                    android:layout_marginTop="4dp"
+                    android:layout_marginEnd="12dp"
+                    android:max="100"
+                    android:progress="0"
+                    android:progressTint="@color/widget_accent_green"
+                    android:progressBackgroundTint="@color/widget_divider" />
+            </LinearLayout>
+        </LinearLayout>
+
         <LinearLayout
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="horizontal"
             android:gravity="center_vertical">
 
-            <!-- Mic button -->
             <ImageButton
                 android:id="@+id/widget_btn_mic"
                 android:layout_width="34dp"
@@ -83,7 +83,6 @@
                 android:scaleType="centerInside"
                 android:padding="7dp" />
 
-            <!-- Calendar button — centre-aligns with flag icon in task rows -->
             <ImageButton
                 android:id="@+id/widget_btn_add_event"
                 android:layout_width="34dp"
@@ -96,7 +95,6 @@
                 android:scaleType="centerInside"
                 android:padding="7dp" />
 
-            <!-- Add Task button — centre-aligns with pin icon in task rows -->
             <ImageButton
                 android:id="@+id/widget_btn_add_task"
                 android:layout_width="34dp"
@@ -113,9 +111,6 @@
 
     </LinearLayout>
 
-    <!-- ── Divider ─────────────────────────────────────────────────────── -->
-    <!-- Note: plain android.view.View is not on the RemoteViews allowlist in
-         API 31+. Use TextView with empty text as a safe divider instead. -->
     <TextView
         android:layout_width="match_parent"
         android:layout_height="1dp"
@@ -123,7 +118,6 @@
         android:layout_marginBottom="4dp"
         android:text="" />
 
-    <!-- ── Task list (populated by TaskWidgetService / RemoteViewsFactory) -->
     <ListView
         android:id="@+id/widget_task_list"
         android:layout_width="match_parent"
@@ -137,7 +131,6 @@
         android:scrollbars="none"
         android:overScrollMode="never" />
 
-    <!-- ── Empty state (shown automatically when ListView has no items) ── -->
     <TextView
         android:id="@+id/widget_empty_text"
         android:layout_width="match_parent"
