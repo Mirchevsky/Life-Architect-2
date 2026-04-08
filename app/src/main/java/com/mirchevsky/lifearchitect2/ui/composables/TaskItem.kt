@@ -1,12 +1,15 @@
 package com.mirchevsky.lifearchitect2.ui.composables
 
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -19,7 +22,6 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.text.KeyboardActions
@@ -27,7 +29,6 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.outlined.Flag
-import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -61,7 +62,11 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.colorResource
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -86,41 +91,42 @@ import java.time.format.DateTimeFormatter
 
 /**
  *
- * Displays a single pending task in a card.
- *
- * Interaction model:
- *
- * Tap card (outside the title) → marks task complete.
- *
- * Long-press card OR tap title → inline title editing via [BasicTextField].
- *
- * Pressing Done on the keyboard commits the change via [onUpdate].
- *
- * Calendar icon (tap) → opens DatePicker → TimeInput flow to edit the
- *
- * due date/time. On confirm, [onUpdateDueDate] is called with the old and new millis
- *
- * so the ViewModel can sync the device calendar correctly. Shows a "Calendar Updated"
- *
- * popup after the change is confirmed.
- *
- * Flag icon → toggles [TaskEntity.isUrgent]. Outlined icon tinted red when urgent.
- *
- * Pin icon → toggles [TaskEntity.isPinned]. Outlined icon tinted amber when pinned.
- *
- * Title colour is always the app primary green for this surface.
- *
- * @param task The task entity to display.
- *
- * @param onCompleted Called when the user checks the task off.
- *
- * @param onUpdate Called for pin/urgent toggles and title edits.
- *
- * @param onUpdateDueDate Called when the due date/time changes. Receives the old millis
- *
- * (nullable) and the new millis so the ViewModel can decide
- *
- * whether to delete+recreate or update the calendar event.
+
+Displays a single pending task in a card.
+
+Interaction model:
+
+Tap card (outside the title) → marks task complete.
+
+Long-press card OR tap title → inline title editing via [BasicTextField].
+
+Pressing Done on the keyboard commits the change via [onUpdate].
+
+Calendar icon (tap) → opens DatePicker → TimeInput flow to edit the
+
+due date/time. On confirm, [onUpdateDueDate] is called with the old and new millis
+
+so the ViewModel can sync the device calendar correctly. Shows a "Calendar Updated"
+
+popup after the change is confirmed.
+
+Flag icon → toggles [TaskEntity.isUrgent]. Outlined icon tinted red when urgent.
+
+Pin icon → toggles [TaskEntity.isPinned]. Outlined icon tinted amber when pinned.
+
+Title colour is always the app primary green for this surface.
+
+@param task The task entity to display.
+
+@param onCompleted Called when the user checks the task off.
+
+@param onUpdate Called for pin/urgent toggles and title edits.
+
+@param onUpdateDueDate Called when the due date/time changes. Receives the old millis
+
+(nullable) and the new millis so the ViewModel can decide
+
+whether to delete+recreate or update the calendar event.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -320,15 +326,41 @@ fun TaskItem(
                 )
             }
 
+            val pinAnimationProgress = remember(task.id) {
+                Animatable(if (task.isPinned) 1f else 0f)
+            }
+            LaunchedEffect(task.isPinned) {
+                if (task.isPinned) {
+                    if (pinAnimationProgress.value < 1f) {
+                        pinAnimationProgress.animateTo(
+                            targetValue = 1f,
+                            animationSpec = tween(
+                                durationMillis = 375,
+                                easing = FastOutSlowInEasing
+                            )
+                        )
+                    }
+                } else {
+                    pinAnimationProgress.snapTo(0f)
+                }
+            }
+            val pinIconSize = 20.dp
+            val pinIconSizePx = with(LocalDensity.current) { pinIconSize.toPx() }
+
             IconButton(
                 onClick = { onUpdate(task.copy(isPinned = !task.isPinned)) },
                 modifier = Modifier.size(36.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.PushPin,
+                Image(
+                    painter = painterResource(id = R.drawable.ic_task_pin_unpinned),
                     contentDescription = if (task.isPinned) "Unpin task" else "Pin task to top",
-                    tint = inactiveActionTint,
-                    modifier = Modifier.size(20.dp)
+                    modifier = Modifier
+                        .size(pinIconSize)
+                        .graphicsLayer {
+                            transformOrigin = TransformOrigin(0.5f, 0.95f)
+                            rotationZ = -20f * pinAnimationProgress.value
+                            translationY = (pinIconSizePx * 0.05f) * pinAnimationProgress.value
+                        }
                 )
             }
         }
@@ -680,15 +712,16 @@ private fun taskEditTimeFieldContentColor(): Color {
 
 /**
  *
- * A floating "Calendar Updated" confirmation popup that animates upward and fades out,
- *
- * matching the style of the "Added to Calendar" popup in [AddTaskItem].
- *
- * The outer [Box] is 200 dp tall so the text (anchored at the bottom) can travel
- *
- * 120 dp upward without leaving the Popup window bounds and being clipped.
- *
- * @param onDismiss Called when the animation completes.
+
+A floating "Calendar Updated" confirmation popup that animates upward and fades out,
+
+matching the style of the "Added to Calendar" popup in [AddTaskItem].
+
+The outer [Box] is 200 dp tall so the text (anchored at the bottom) can travel
+
+120 dp upward without leaving the Popup window bounds and being clipped.
+
+@param onDismiss Called when the animation completes.
  */
 @Composable
 private fun CalendarUpdatedPopup(onDismiss: () -> Unit) {

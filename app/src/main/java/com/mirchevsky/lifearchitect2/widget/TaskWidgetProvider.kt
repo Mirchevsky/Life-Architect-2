@@ -304,7 +304,10 @@ class TaskWidgetProvider : AppWidgetProvider() {
         )
 
         rv.setInt(R.id.widget_item_flag, "setColorFilter", inactiveFlagPinTint)
-        rv.setInt(R.id.widget_item_pin, "setColorFilter", inactiveFlagPinTint)
+        rv.setImageViewResource(
+            R.id.widget_item_pin,
+            if (task.isPinned) R.drawable.ic_task_pin_pinned else R.drawable.ic_task_pin_unpinned
+        )
 
         val isEvent = task.status == "event"
         rv.setViewVisibility(R.id.widget_item_calendar, if (isEvent) View.VISIBLE else View.GONE)
