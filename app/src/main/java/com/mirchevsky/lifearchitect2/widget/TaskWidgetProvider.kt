@@ -288,7 +288,6 @@ class TaskWidgetProvider : AppWidgetProvider() {
             (context.resources.configuration.uiMode and android.content.res.Configuration.UI_MODE_NIGHT_MASK) ==
                     android.content.res.Configuration.UI_MODE_NIGHT_YES
         val titleColor = if (isDarkTheme) context.getColor(R.color.white) else context.getColor(R.color.black)
-        val inactiveFlagPinTint = if (isDarkTheme) colorIconInactive else context.getColor(R.color.black)
         rv.setImageViewResource(
             R.id.widget_item_dot,
             getCheckboxDrawableRes(task)
@@ -303,7 +302,10 @@ class TaskWidgetProvider : AppWidgetProvider() {
             if (isGlowActive) 14f else 13f
         )
 
-        rv.setInt(R.id.widget_item_flag, "setColorFilter", inactiveFlagPinTint)
+        rv.setImageViewResource(
+            R.id.widget_item_flag,
+            if (task.isUrgent) R.drawable.ic_task_flag_urgent else R.drawable.ic_task_flag_non_urgent
+        )
         rv.setImageViewResource(
             R.id.widget_item_pin,
             if (task.isPinned) R.drawable.ic_task_pin_pinned else R.drawable.ic_task_pin_unpinned

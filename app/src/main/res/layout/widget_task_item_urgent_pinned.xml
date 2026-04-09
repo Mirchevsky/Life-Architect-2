@@ -1,16 +1,5 @@
-<?xml version="1.0" encoding="utf-8"?>
-<!-- widget_task_item_urgent_pinned.xml
-     Single task row for tasks that are BOTH urgent AND pinned. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/widget_item_root"
-    android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:orientation="horizontal"
-    android:gravity="center_vertical"
-    android:paddingStart="8dp"
-    android:paddingEnd="2dp"
-    android:background="@drawable/widget_item_bg"
-    android:minHeight="52dp">
+<?xml version="1.0" encoding="utf-8"?> <!-- widget_task_item_urgent_pinned.xml Single task row for tasks that are BOTH urgent AND pinned. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_item_root" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingStart="8dp" android:paddingEnd="2dp" android:background="@drawable/widget_item_bg" android:minHeight="52dp">
 
     <ImageView
         android:id="@+id/widget_item_dot"
@@ -86,7 +75,7 @@
                 android:layout_width="20dp"
                 android:layout_height="20dp"
                 android:layout_gravity="center"
-                android:src="@drawable/widget_ic_flag"
+                android:src="@drawable/ic_task_flag_non_urgent"
                 android:contentDescription="Toggle urgent"
                 android:visibility="visible" />
         </FrameLayout>
@@ -106,5 +95,4 @@
                 android:visibility="visible" />
         </FrameLayout>
     </LinearLayout>
-
 </LinearLayout>

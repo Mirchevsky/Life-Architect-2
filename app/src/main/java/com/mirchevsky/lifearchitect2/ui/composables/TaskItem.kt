@@ -2,8 +2,13 @@ package com.mirchevsky.lifearchitect2.ui.composables
 
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -28,7 +33,6 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.outlined.Flag
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -60,13 +64,17 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.colorResource
 import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -88,45 +96,46 @@ import java.time.LocalDateTime
 import java.time.LocalTime
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import kotlin.math.PI
+import kotlin.math.sin
 
 /**
  *
-
-Displays a single pending task in a card.
-
-Interaction model:
-
-Tap card (outside the title) → marks task complete.
-
-Long-press card OR tap title → inline title editing via [BasicTextField].
-
-Pressing Done on the keyboard commits the change via [onUpdate].
-
-Calendar icon (tap) → opens DatePicker → TimeInput flow to edit the
-
-due date/time. On confirm, [onUpdateDueDate] is called with the old and new millis
-
-so the ViewModel can sync the device calendar correctly. Shows a "Calendar Updated"
-
-popup after the change is confirmed.
-
-Flag icon → toggles [TaskEntity.isUrgent]. Outlined icon tinted red when urgent.
-
-Pin icon → toggles [TaskEntity.isPinned]. Outlined icon tinted amber when pinned.
-
-Title colour is always the app primary green for this surface.
-
-@param task The task entity to display.
-
-@param onCompleted Called when the user checks the task off.
-
-@param onUpdate Called for pin/urgent toggles and title edits.
-
-@param onUpdateDueDate Called when the due date/time changes. Receives the old millis
-
-(nullable) and the new millis so the ViewModel can decide
-
-whether to delete+recreate or update the calendar event.
+ * Displays a single pending task in a card.
+ *
+ * Interaction model:
+ *
+ * Tap card (outside the title) → marks task complete.
+ *
+ * Long-press card OR tap title → inline title editing via [BasicTextField].
+ *
+ * Pressing Done on the keyboard commits the change via [onUpdate].
+ *
+ * Calendar icon (tap) → opens DatePicker → TimeInput flow to edit the
+ *
+ * due date/time. On confirm, [onUpdateDueDate] is called with the old and new millis
+ *
+ * so the ViewModel can sync the device calendar correctly. Shows a "Calendar Updated"
+ *
+ * popup after the change is confirmed.
+ *
+ * Flag icon → toggles [TaskEntity.isUrgent]. Uses custom SVG-derived flag assets; waves continuously while urgent is active.
+ *
+ * Pin icon → toggles [TaskEntity.isPinned]. Outlined icon tinted amber when pinned.
+ *
+ * Title colour is always the app primary green for this surface.
+ *
+ * @param task The task entity to display.
+ *
+ * @param onCompleted Called when the user checks the task off.
+ *
+ * @param onUpdate Called for pin/urgent toggles and title edits.
+ *
+ * @param onUpdateDueDate Called when the due date/time changes. Receives the old millis
+ *
+ * (nullable) and the new millis so the ViewModel can decide
+ *
+ * whether to delete+recreate or update the calendar event.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -143,7 +152,6 @@ fun TaskItem(
     val dueDate: LocalDate? = dueDateTime?.toLocalDate()
     val isOverdue = dueDate != null && dueDate.isBefore(LocalDate.now())
 
-    // ── Inline editing ──────────────────────────────────────────────────────
     var isEditing by remember(task.id) { mutableStateOf(false) }
     var titleFieldValue by remember(task.id) {
         mutableStateOf(TextFieldValue(task.title, selection = TextRange(task.title.length)))
@@ -155,28 +163,34 @@ fun TaskItem(
 
     fun commitEdit() {
         val trimmed = titleFieldValue.text.trim()
-        if (trimmed.isNotBlank() && trimmed != task.title) onUpdate(task.copy(title = trimmed))
+        if (trimmed.isNotBlank() && trimmed != task.title) {
+            onUpdate(task.copy(title = trimmed))
+        }
         isEditing = false
     }
 
-    // ── Date/time picker state ──────────────────────────────────────────────
     var showDatePicker by remember(task.id) { mutableStateOf(false) }
     var showTimePicker by remember(task.id) { mutableStateOf(false) }
     var pendingDateMillis by remember(task.id) { mutableStateOf(task.dueDate) }
 
-    // ── Calendar Updated popup ──────────────────────────────────────────────
     var showCalendarUpdatedPopup by remember(task.id) { mutableStateOf(false) }
 
-    val todayMillis = LocalDate.now().atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+    val todayMillis = LocalDate.now()
+        .atStartOfDay(ZoneId.systemDefault())
+        .toInstant()
+        .toEpochMilli()
+
     val datePickerState = rememberDatePickerState(
         initialSelectedDateMillis = task.dueDate ?: todayMillis,
         selectableDates = object : SelectableDates {
-            override fun isSelectableDate(utcTimeMillis: Long) = utcTimeMillis >= todayMillis
+            override fun isSelectableDate(utcTimeMillis: Long): Boolean = utcTimeMillis >= todayMillis
         }
     )
+
     LaunchedEffect(task.id, task.dueDate, todayMillis) {
         datePickerState.selectedDateMillis = task.dueDate ?: todayMillis
     }
+
     var isAllDay by remember(task.id) { mutableStateOf(false) }
     var hour by remember(task.id) {
         mutableStateOf(
@@ -193,17 +207,12 @@ fun TaskItem(
         )
     }
 
-    // ── Title colour ────────────────────────────────────────────────────────
     val titleColor: Color = if (isSystemInDarkTheme()) {
         colorResource(id = R.color.white)
     } else {
         colorResource(id = R.color.black)
     }
-    val inactiveActionTint = if (isSystemInDarkTheme()) {
-        colorResource(id = R.color.white)
-    } else {
-        colorResource(id = R.color.black)
-    }
+
     val glowStrength = spotlightStrength.coerceIn(0f, 1f)
     val titleShadow = Shadow(
         color = titleColor.copy(alpha = 1.0f * glowStrength),
@@ -211,7 +220,6 @@ fun TaskItem(
         blurRadius = 56f * glowStrength
     )
 
-    // ── Card ────────────────────────────────────────────────────────────
     Card(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
@@ -240,10 +248,12 @@ fun TaskItem(
                 task.isPinned -> BrandAmber
                 else -> MaterialTheme.colorScheme.primary
             }
+
             AnimatedCompletionGlowBox(
                 accentColor = completionAccent,
                 modifier = Modifier.size(36.dp)
             )
+
             Spacer(modifier = Modifier.width(4.dp))
 
             Column(modifier = Modifier.weight(1f)) {
@@ -291,6 +301,7 @@ fun TaskItem(
                     val dateLabel = dueDate.format(DateTimeFormatter.ofPattern("MMM d"))
                     val timeLabel = dueDateTime.format(DateTimeFormatter.ofPattern("HH:mm"))
                     val label = "$dateLabel, $timeLabel"
+
                     Text(
                         text = if (isOverdue) "Overdue — $label" else label,
                         style = MaterialTheme.typography.bodySmall,
@@ -314,21 +325,73 @@ fun TaskItem(
                 }
             }
 
+            val isUrgentWaveActive = task.isUrgent && !task.isCompleted
+            val urgentRaiseProgress = remember(task.id) {
+                Animatable(if (isUrgentWaveActive) 1f else 0f)
+            }
+            var previousUrgentWaveActive by remember(task.id) { mutableStateOf(isUrgentWaveActive) }
+
+            LaunchedEffect(isUrgentWaveActive) {
+                if (isUrgentWaveActive && !previousUrgentWaveActive) {
+                    urgentRaiseProgress.snapTo(0f)
+                    urgentRaiseProgress.animateTo(
+                        targetValue = 1f,
+                        animationSpec = tween(
+                            durationMillis = 450,
+                            easing = FastOutSlowInEasing
+                        )
+                    )
+                } else if (!isUrgentWaveActive) {
+                    urgentRaiseProgress.snapTo(0f)
+                }
+                previousUrgentWaveActive = isUrgentWaveActive
+            }
+
+            val urgentIconSize = 20.dp
+            val urgentIconSizePx = with(LocalDensity.current) { urgentIconSize.toPx() }
+            val raiseOffsetPx = if (isUrgentWaveActive || urgentRaiseProgress.value > 0f) {
+                (1f - urgentRaiseProgress.value.coerceIn(0f, 1f)) * (urgentIconSizePx * 0.6f)
+            } else {
+                0f
+            }
+
+            val urgentWaveTransition = rememberInfiniteTransition(label = "urgentFlagWave")
+            val urgentWaveAnimatedValue = urgentWaveTransition.animateFloat(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = infiniteRepeatable(
+                    animation = tween(durationMillis = 850, easing = LinearEasing),
+                    repeatMode = RepeatMode.Reverse
+                ),
+                label = "urgentFlagWaveProgress"
+            ).value
+            val waveProgress = if (isUrgentWaveActive) urgentWaveAnimatedValue else 0f
+
             IconButton(
                 onClick = { onUpdate(task.copy(isUrgent = !task.isUrgent)) },
                 modifier = Modifier.size(36.dp)
             ) {
-                Icon(
-                    imageVector = Icons.Outlined.Flag,
-                    contentDescription = if (task.isUrgent) "Remove urgent" else "Mark urgent",
-                    tint = inactiveActionTint,
-                    modifier = Modifier.size(20.dp)
-                )
+                Box(
+                    modifier = Modifier.size(urgentIconSize),
+                    contentAlignment = Alignment.Center
+                ) {
+                    UrgentFlagIcon(
+                        isWaving = isUrgentWaveActive,
+                        phase = waveProgress,
+                        modifier = Modifier
+                            .size(urgentIconSize)
+                            .graphicsLayer {
+                                translationY = raiseOffsetPx
+                            },
+                        contentDescription = if (task.isUrgent) "Remove urgent" else "Mark urgent"
+                    )
+                }
             }
 
             val pinAnimationProgress = remember(task.id) {
                 Animatable(if (task.isPinned) 1f else 0f)
             }
+
             LaunchedEffect(task.isPinned) {
                 if (task.isPinned) {
                     if (pinAnimationProgress.value < 1f) {
@@ -344,6 +407,7 @@ fun TaskItem(
                     pinAnimationProgress.snapTo(0f)
                 }
             }
+
             val pinIconSize = 20.dp
             val pinIconSizePx = with(LocalDensity.current) { pinIconSize.toPx() }
 
@@ -366,7 +430,6 @@ fun TaskItem(
         }
     }
 
-    // ── Calendar Updated popup — anchored to bottom of screen ────────────
     if (showCalendarUpdatedPopup) {
         Popup(
             alignment = Alignment.BottomCenter,
@@ -376,7 +439,6 @@ fun TaskItem(
         }
     }
 
-    // ── Date picker dialog ──────────────────────────────────────────────────
     if (showDatePicker) {
         Dialog(
             onDismissRequest = { showDatePicker = false },
@@ -476,7 +538,6 @@ fun TaskItem(
         }
     }
 
-    // ── Time picker dialog ────────────────────────────────────────────────
     if (showTimePicker) {
         Dialog(
             onDismissRequest = { showTimePicker = false },
@@ -615,17 +676,85 @@ fun TaskItem(
 }
 
 @Composable
+private fun UrgentFlagIcon(
+    isWaving: Boolean,
+    phase: Float,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null
+) {
+    val flagColor = if (isSystemInDarkTheme()) {
+        colorResource(id = R.color.white)
+    } else {
+        colorResource(id = R.color.black)
+    }
+
+    val semanticModifier = if (contentDescription != null) {
+        modifier.semantics { this.contentDescription = contentDescription }
+    } else {
+        modifier
+    }
+
+    Canvas(modifier = semanticModifier) {
+        val sx = size.width / 100f
+        val sy = size.height / 100f
+        val wave = if (isWaving) {
+            sin((phase * (2f * PI) + (PI / 2f)).toDouble()).toFloat()
+        } else {
+            1f
+        }
+
+        val topCtrlY = 20f - (wave * 5f)
+        val topCtrlMirrorY = 40f - topCtrlY
+        val bottomCtrlY = 45f + (wave * 5f)
+        val bottomCtrlMirrorY = 90f - bottomCtrlY
+
+        val viewportWidth = 100f
+        val geometryMinX = 21f
+        val geometryMaxX = 65f
+        val geometryCenterX = (geometryMinX + geometryMaxX) / 2f
+
+        fun x(value: Float): Float = ((value - geometryCenterX) + (viewportWidth / 2f)) * sx
+
+        drawLine(
+            color = flagColor,
+            start = Offset(x(25f), 90f * sy),
+            end = Offset(x(25f), 15f * sy),
+            strokeWidth = 4f * ((sx + sy) / 2f),
+            cap = StrokeCap.Round
+        )
+
+        drawCircle(
+            color = flagColor,
+            radius = 4f * ((sx + sy) / 2f),
+            center = Offset(x(25f), 15f * sy)
+        )
+
+        val clothPath = Path().apply {
+            moveTo(x(25f), 20f * sy)
+            quadraticTo(x(35f), topCtrlY * sy, x(45f), 20f * sy)
+            quadraticTo(x(55f), topCtrlMirrorY * sy, x(65f), 20f * sy)
+            lineTo(x(65f), 45f * sy)
+            quadraticTo(x(55f), bottomCtrlY * sy, x(45f), 45f * sy)
+            quadraticTo(x(35f), bottomCtrlMirrorY * sy, x(25f), 45f * sy)
+            close()
+        }
+
+        drawPath(path = clothPath, color = flagColor)
+    }
+}
+
+@Composable
 private fun AnimatedCompletionGlowBox(
     accentColor: Color,
     modifier: Modifier = Modifier
 ) {
-    val infinite = androidx.compose.animation.core.rememberInfiniteTransition(label = "taskCompletionGlow")
+    val infinite = rememberInfiniteTransition(label = "taskCompletionGlow")
     val pulse by infinite.animateFloat(
         initialValue = 0.72f,
         targetValue = 1f,
-        animationSpec = androidx.compose.animation.core.infiniteRepeatable(
+        animationSpec = infiniteRepeatable(
             animation = tween(durationMillis = 1800),
-            repeatMode = androidx.compose.animation.core.RepeatMode.Reverse
+            repeatMode = RepeatMode.Reverse
         ),
         label = "taskCompletionGlowPulse"
     )
@@ -712,16 +841,15 @@ private fun taskEditTimeFieldContentColor(): Color {
 
 /**
  *
-
-A floating "Calendar Updated" confirmation popup that animates upward and fades out,
-
-matching the style of the "Added to Calendar" popup in [AddTaskItem].
-
-The outer [Box] is 200 dp tall so the text (anchored at the bottom) can travel
-
-120 dp upward without leaving the Popup window bounds and being clipped.
-
-@param onDismiss Called when the animation completes.
+ * A floating "Calendar Updated" confirmation popup that animates upward and fades out,
+ *
+ * matching the style of the "Added to Calendar" popup in [AddTaskItem].
+ *
+ * The outer [Box] is 200 dp tall so the text (anchored at the bottom) can travel
+ *
+ * 120 dp upward without leaving the Popup window bounds and being clipped.
+ *
+ * @param onDismiss Called when the animation completes.
  */
 @Composable
 private fun CalendarUpdatedPopup(onDismiss: () -> Unit) {

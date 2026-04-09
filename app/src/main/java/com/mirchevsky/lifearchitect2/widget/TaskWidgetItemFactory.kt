@@ -99,7 +99,6 @@ class TaskWidgetItemFactory(
     private val colorUrgent by lazy { ContextCompat.getColor(context, R.color.widget_urgent) }
     private val colorPinned by lazy { ContextCompat.getColor(context, R.color.widget_pinned) }
     private val colorPrimary by lazy { ContextCompat.getColor(context, R.color.widget_text_primary) }
-    private val colorDefault by lazy { ContextCompat.getColor(context, R.color.widget_icon_inactive) }
     private val colorPurple by lazy { ContextCompat.getColor(context, R.color.widget_accent_purple) }
 
     // ── Factory lifecycle ───────────────────────────────────────────────────
@@ -145,7 +144,10 @@ class TaskWidgetItemFactory(
 
         // ── Flag icon (always visible; neutral tint in all states) ────────────
         rv.setViewVisibility(R.id.widget_item_flag, View.VISIBLE)
-        rv.setInt(R.id.widget_item_flag, "setColorFilter", colorDefault)
+        rv.setImageViewResource(
+            R.id.widget_item_flag,
+            if (task.isUrgent) R.drawable.ic_task_flag_urgent else R.drawable.ic_task_flag_non_urgent
+        )
 
         // ── Pin icon (always visible; neutral tint in all states) ─────────────
         rv.setViewVisibility(R.id.widget_item_pin, View.VISIBLE)
