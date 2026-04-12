@@ -10,7 +10,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
@@ -68,11 +67,12 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.colorResource
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.TextRange
@@ -101,41 +101,42 @@ import kotlin.math.sin
 
 /**
  *
- * Displays a single pending task in a card.
- *
- * Interaction model:
- *
- * Tap card (outside the title) → marks task complete.
- *
- * Long-press card OR tap title → inline title editing via [BasicTextField].
- *
- * Pressing Done on the keyboard commits the change via [onUpdate].
- *
- * Calendar icon (tap) → opens DatePicker → TimeInput flow to edit the
- *
- * due date/time. On confirm, [onUpdateDueDate] is called with the old and new millis
- *
- * so the ViewModel can sync the device calendar correctly. Shows a "Calendar Updated"
- *
- * popup after the change is confirmed.
- *
- * Flag icon → toggles [TaskEntity.isUrgent]. Uses custom SVG-derived flag assets; waves continuously while urgent is active.
- *
- * Pin icon → toggles [TaskEntity.isPinned]. Outlined icon tinted amber when pinned.
- *
- * Title colour is always the app primary green for this surface.
- *
- * @param task The task entity to display.
- *
- * @param onCompleted Called when the user checks the task off.
- *
- * @param onUpdate Called for pin/urgent toggles and title edits.
- *
- * @param onUpdateDueDate Called when the due date/time changes. Receives the old millis
- *
- * (nullable) and the new millis so the ViewModel can decide
- *
- * whether to delete+recreate or update the calendar event.
+
+Displays a single pending task in a card.
+
+Interaction model:
+
+Tap card (outside the title) → marks task complete.
+
+Long-press card OR tap title → inline title editing via [BasicTextField].
+
+Pressing Done on the keyboard commits the change via [onUpdate].
+
+Calendar icon (tap) → opens DatePicker → TimeInput flow to edit the
+
+due date/time. On confirm, [onUpdateDueDate] is called with the old and new millis
+
+so the ViewModel can sync the device calendar correctly. Shows a "Calendar Updated"
+
+popup after the change is confirmed.
+
+Flag icon → toggles [TaskEntity.isUrgent]. Uses custom SVG-derived flag assets; waves continuously while urgent is active.
+
+Pin icon → toggles [TaskEntity.isPinned]. Outlined icon tinted amber when pinned.
+
+Title colour is always the app primary green for this surface.
+
+@param task The task entity to display.
+
+@param onCompleted Called when the user checks the task off.
+
+@param onUpdate Called for pin/urgent toggles and title edits.
+
+@param onUpdateDueDate Called when the due date/time changes. Receives the old millis
+
+(nullable) and the new millis so the ViewModel can decide
+
+whether to delete+recreate or update the calendar event.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -391,40 +392,37 @@ fun TaskItem(
             val pinAnimationProgress = remember(task.id) {
                 Animatable(if (task.isPinned) 1f else 0f)
             }
+            var previousPinnedState by remember(task.id) { mutableStateOf(task.isPinned) }
 
             LaunchedEffect(task.isPinned) {
-                if (task.isPinned) {
-                    if (pinAnimationProgress.value < 1f) {
-                        pinAnimationProgress.animateTo(
-                            targetValue = 1f,
-                            animationSpec = tween(
-                                durationMillis = 375,
-                                easing = FastOutSlowInEasing
-                            )
+                if (task.isPinned && !previousPinnedState) {
+                    pinAnimationProgress.snapTo(0f)
+                    pinAnimationProgress.animateTo(
+                        targetValue = 1f,
+                        animationSpec = tween(
+                            durationMillis = 1600,
+                            easing = LinearEasing
                         )
-                    }
+                    )
+                } else if (task.isPinned) {
+                    pinAnimationProgress.snapTo(1f)
                 } else {
                     pinAnimationProgress.snapTo(0f)
                 }
+                previousPinnedState = task.isPinned
             }
 
-            val pinIconSize = 20.dp
-            val pinIconSizePx = with(LocalDensity.current) { pinIconSize.toPx() }
+            val pinIconSize = urgentIconSize
 
             IconButton(
                 onClick = { onUpdate(task.copy(isPinned = !task.isPinned)) },
                 modifier = Modifier.size(36.dp)
             ) {
-                Image(
-                    painter = painterResource(id = R.drawable.ic_task_pin_unpinned),
-                    contentDescription = if (task.isPinned) "Unpin task" else "Pin task to top",
-                    modifier = Modifier
-                        .size(pinIconSize)
-                        .graphicsLayer {
-                            transformOrigin = TransformOrigin(0.5f, 0.95f)
-                            rotationZ = -20f * pinAnimationProgress.value
-                            translationY = (pinIconSizePx * 0.05f) * pinAnimationProgress.value
-                        }
+                MemoPinIcon(
+                    animationProgress = pinAnimationProgress.value,
+                    isPinned = task.isPinned,
+                    modifier = Modifier.size(pinIconSize),
+                    contentDescription = if (task.isPinned) "Unpin task" else "Pin task to top"
                 )
             }
         }
@@ -744,6 +742,141 @@ private fun UrgentFlagIcon(
 }
 
 @Composable
+private fun MemoPinIcon(
+    animationProgress: Float,
+    isPinned: Boolean,
+    modifier: Modifier = Modifier,
+    contentDescription: String? = null
+) {
+    val pinColor = if (isSystemInDarkTheme()) {
+        colorResource(id = R.color.white)
+    } else {
+        colorResource(id = R.color.black)
+    }
+
+    val semanticModifier = if (contentDescription != null) {
+        modifier.semantics { this.contentDescription = contentDescription }
+    } else {
+        modifier
+    }
+
+    Canvas(modifier = semanticModifier) {
+        val progress = animationProgress.coerceIn(0f, 1f)
+        val shouldAnimatePinning = isPinned && progress < 1f
+
+        val ringAlpha = when {
+            !isPinned -> 0f
+            !shouldAnimatePinning -> 1f
+            progress < 0.72f -> 0f
+            progress < 0.78f -> ((progress - 0.72f) / 0.06f).coerceIn(0f, 1f)
+            else -> 1f
+        }
+        val ringSweep = when {
+            !isPinned -> 0f
+            !shouldAnimatePinning -> 1f
+            else -> ((progress - 0.72f) / 0.28f).coerceIn(0f, 1f)
+        }
+
+        if (ringAlpha > 0f && ringSweep > 0f) {
+            val ringRect = androidx.compose.ui.geometry.Rect(
+                left = size.width * (70f / 256f),
+                top = size.height * (198f / 256f),
+                right = size.width * (186f / 256f),
+                bottom = size.height * (230f / 256f)
+            )
+            drawArc(
+                color = pinColor.copy(alpha = ringAlpha),
+                startAngle = -180f,
+                sweepAngle = 360f * ringSweep,
+                useCenter = false,
+                topLeft = ringRect.topLeft,
+                size = ringRect.size,
+                style = androidx.compose.ui.graphics.drawscope.Stroke(
+                    width = (2.5f / 256f) * size.minDimension,
+                    cap = StrokeCap.Round
+                )
+            )
+        }
+
+        val translationFactors = floatArrayOf(-36f / 256f, -10f / 256f, 0f, -4f / 256f, 0f)
+        val translationTimes = floatArrayOf(0f, 0.35f, 0.62f, 0.78f, 1f)
+        val rotationValues = floatArrayOf(0f, 0f, -8f, 5f, -2f, 0f)
+        val rotationTimes = floatArrayOf(0f, 0.55f, 0.68f, 0.8f, 0.9f, 1f)
+
+        val translateY = if (shouldAnimatePinning) {
+            lerpKeyframedValue(progress, translationTimes, translationFactors) * size.height
+        } else {
+            0f
+        }
+        val rotation = if (shouldAnimatePinning) {
+            lerpKeyframedValue(progress, rotationTimes, rotationValues)
+        } else {
+            0f
+        }
+
+        withTransform({
+            translate(left = 0f, top = translateY)
+            rotate(degrees = rotation, pivot = Offset(size.width * 0.5f, size.height * (120f / 256f)))
+        }) {
+            val sx = size.width / 256f
+            val sy = size.height / 256f
+
+            val headPath = Path().apply {
+                moveTo(101f * sx, 56f * sy)
+                quadraticTo(102f * sx, 46f * sy, 112f * sx, 46f * sy)
+                lineTo(144f * sx, 46f * sy)
+                quadraticTo(154f * sx, 46f * sy, 155f * sx, 56f * sy)
+                lineTo(149f * sx, 66f * sy)
+                lineTo(149f * sx, 102f * sy)
+                quadraticTo(149f * sx, 110f * sy, 156f * sx, 110f * sy)
+                lineTo(160f * sx, 110f * sy)
+                quadraticTo(167f * sx, 110f * sy, 167f * sx, 117f * sy)
+                lineTo(167f * sx, 120f * sy)
+                quadraticTo(167f * sx, 127f * sy, 160f * sx, 127f * sy)
+                lineTo(96f * sx, 127f * sy)
+                quadraticTo(89f * sx, 127f * sy, 89f * sx, 120f * sy)
+                lineTo(89f * sx, 117f * sy)
+                quadraticTo(89f * sx, 110f * sy, 96f * sx, 110f * sy)
+                lineTo(100f * sx, 110f * sy)
+                quadraticTo(107f * sx, 110f * sy, 107f * sx, 102f * sy)
+                lineTo(107f * sx, 66f * sy)
+                close()
+            }
+
+            val shaftPath = Path().apply {
+                moveTo(120f * sx, 127f * sy)
+                lineTo(136f * sx, 127f * sy)
+                lineTo(136f * sx, 180f * sy)
+                lineTo(128f * sx, 212f * sy)
+                lineTo(120f * sx, 180f * sy)
+                close()
+            }
+
+            drawPath(path = headPath, color = pinColor)
+            drawPath(path = shaftPath, color = pinColor)
+        }
+    }
+}
+
+private fun lerpKeyframedValue(progress: Float, times: FloatArray, values: FloatArray): Float {
+    if (times.size != values.size || times.isEmpty()) return 0f
+    val clamped = progress.coerceIn(0f, 1f)
+    if (clamped <= times.first()) return values.first()
+    if (clamped >= times.last()) return values.last()
+
+    for (i in 0 until times.lastIndex) {
+        val startTime = times[i]
+        val endTime = times[i + 1]
+        if (clamped in startTime..endTime) {
+            val t = if (endTime == startTime) 0f else (clamped - startTime) / (endTime - startTime)
+            return androidx.compose.ui.util.lerp(values[i], values[i + 1], t)
+        }
+    }
+
+    return values.last()
+}
+
+@Composable
 private fun AnimatedCompletionGlowBox(
     accentColor: Color,
     modifier: Modifier = Modifier
@@ -841,15 +974,16 @@ private fun taskEditTimeFieldContentColor(): Color {
 
 /**
  *
- * A floating "Calendar Updated" confirmation popup that animates upward and fades out,
- *
- * matching the style of the "Added to Calendar" popup in [AddTaskItem].
- *
- * The outer [Box] is 200 dp tall so the text (anchored at the bottom) can travel
- *
- * 120 dp upward without leaving the Popup window bounds and being clipped.
- *
- * @param onDismiss Called when the animation completes.
+
+A floating "Calendar Updated" confirmation popup that animates upward and fades out,
+
+matching the style of the "Added to Calendar" popup in [AddTaskItem].
+
+The outer [Box] is 200 dp tall so the text (anchored at the bottom) can travel
+
+120 dp upward without leaving the Popup window bounds and being clipped.
+
+@param onDismiss Called when the animation completes.
  */
 @Composable
 private fun CalendarUpdatedPopup(onDismiss: () -> Unit) {
