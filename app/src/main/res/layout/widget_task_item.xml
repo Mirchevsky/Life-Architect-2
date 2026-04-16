@@ -1,5 +1,15 @@
-<?xml version="1.0" encoding="utf-8"?> <!-- widget_task_item.xml Single task row for the Life Architect 2 home screen widget. -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android" android:id="@+id/widget_item_root" android:layout_width="match_parent" android:layout_height="wrap_content" android:orientation="horizontal" android:gravity="center_vertical" android:paddingStart="8dp" android:paddingEnd="2dp" android:background="@drawable/widget_item_bg" android:minHeight="52dp">
+<?xml version="1.0" encoding="utf-8"?>
+<!-- widget_task_item.xml Single task row for the Life Architect 2 home screen widget. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/widget_item_root"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="horizontal"
+    android:gravity="center_vertical"
+    android:paddingStart="8dp"
+    android:paddingEnd="2dp"
+    android:background="@drawable/widget_item_bg"
+    android:minHeight="52dp">
 
     <ImageView
         android:id="@+id/widget_item_dot"
