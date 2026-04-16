@@ -101,42 +101,41 @@ import kotlin.math.sin
 
 /**
  *
-
-Displays a single pending task in a card.
-
-Interaction model:
-
-Tap card (outside the title) → marks task complete.
-
-Long-press card OR tap title → inline title editing via [BasicTextField].
-
-Pressing Done on the keyboard commits the change via [onUpdate].
-
-Calendar icon (tap) → opens DatePicker → TimeInput flow to edit the
-
-due date/time. On confirm, [onUpdateDueDate] is called with the old and new millis
-
-so the ViewModel can sync the device calendar correctly. Shows a "Calendar Updated"
-
-popup after the change is confirmed.
-
-Flag icon → toggles [TaskEntity.isUrgent]. Uses custom SVG-derived flag assets; waves continuously while urgent is active.
-
-Pin icon → toggles [TaskEntity.isPinned]. Outlined icon tinted amber when pinned.
-
-Title colour is always the app primary green for this surface.
-
-@param task The task entity to display.
-
-@param onCompleted Called when the user checks the task off.
-
-@param onUpdate Called for pin/urgent toggles and title edits.
-
-@param onUpdateDueDate Called when the due date/time changes. Receives the old millis
-
-(nullable) and the new millis so the ViewModel can decide
-
-whether to delete+recreate or update the calendar event.
+ * Displays a single pending task in a card.
+ *
+ * Interaction model:
+ *
+ * Tap card (outside the title) → marks task complete.
+ *
+ * Long-press card OR tap title → inline title editing via [BasicTextField].
+ *
+ * Pressing Done on the keyboard commits the change via [onUpdate].
+ *
+ * Calendar icon (tap) → opens DatePicker → TimeInput flow to edit the
+ *
+ * due date/time. On confirm, [onUpdateDueDate] is called with the old and new millis
+ *
+ * so the ViewModel can sync the device calendar correctly. Shows a "Calendar Updated"
+ *
+ * popup after the change is confirmed.
+ *
+ * Flag icon → toggles [TaskEntity.isUrgent]. Uses custom SVG-derived flag assets; waves continuously while urgent is active.
+ *
+ * Pin icon → toggles [TaskEntity.isPinned]. Outlined icon tinted amber when pinned.
+ *
+ * Title colour is always the app primary green for this surface.
+ *
+ * @param task The task entity to display.
+ *
+ * @param onCompleted Called when the user checks the task off.
+ *
+ * @param onUpdate Called for pin/urgent toggles and title edits.
+ *
+ * @param onUpdateDueDate Called when the due date/time changes. Receives the old millis
+ *
+ * (nullable) and the new millis so the ViewModel can decide
+ *
+ * whether to delete+recreate or update the calendar event.
  */
 @OptIn(ExperimentalFoundationApi::class, ExperimentalMaterial3Api::class)
 @Composable
@@ -817,6 +816,7 @@ private fun MemoPinIcon(
         withTransform({
             translate(left = 0f, top = translateY)
             rotate(degrees = rotation, pivot = Offset(size.width * 0.5f, size.height * (120f / 256f)))
+            scale(scaleX = 1.1f, scaleY = 1.1f, pivot = Offset(size.width * 0.5f, size.height * 0.5f))
         }) {
             val sx = size.width / 256f
             val sy = size.height / 256f
@@ -974,16 +974,15 @@ private fun taskEditTimeFieldContentColor(): Color {
 
 /**
  *
-
-A floating "Calendar Updated" confirmation popup that animates upward and fades out,
-
-matching the style of the "Added to Calendar" popup in [AddTaskItem].
-
-The outer [Box] is 200 dp tall so the text (anchored at the bottom) can travel
-
-120 dp upward without leaving the Popup window bounds and being clipped.
-
-@param onDismiss Called when the animation completes.
+ * A floating "Calendar Updated" confirmation popup that animates upward and fades out,
+ *
+ * matching the style of the "Added to Calendar" popup in [AddTaskItem].
+ *
+ * The outer [Box] is 200 dp tall so the text (anchored at the bottom) can travel
+ *
+ * 120 dp upward without leaving the Popup window bounds and being clipped.
+ *
+ * @param onDismiss Called when the animation completes.
  */
 @Composable
 private fun CalendarUpdatedPopup(onDismiss: () -> Unit) {
