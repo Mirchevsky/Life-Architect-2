@@ -91,6 +91,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.mirchevsky.lifearchitect2.R
+import com.mirchevsky.lifearchitect2.data.AppLanguage
 import com.mirchevsky.lifearchitect2.permissions.PermissionGateState
 import com.mirchevsky.lifearchitect2.permissions.PermissionPrefs
 import com.mirchevsky.lifearchitect2.permissions.openAppPermissionSettings
@@ -170,58 +171,6 @@ private fun inAppBackButtonContainerColor(): Color {
     }
 }
 
-/**
-
-The inline add-task panel shown at the bottom of the Tasks screen.
-
-Design
-
-A [Card] panel (matching [TaskItem]'s surfaceVariant style) containing:
-
-A borderless [BasicTextField] for the task title.
-
-An internal divider separating the text area from the action row.
-
-Three static side-by-side action buttons (right-aligned):
-
-Mic button: uses Android's [SpeechRecognizer] API directly — no system
-
-overlay, no privacy notice dialog. Recognizes in the device's default language.
-
-The mic button pulses while listening; partial results fill the field in real-time.
-
-Calendar button (purple): opens a two-step date + time picker pre-filled by
-
-[DateIntentParser]. On confirm, writes the event silently to the system calendar
-
-via [CalendarContract] content provider and requests an immediate sync. Falls
-
-back to [Intent.ACTION_INSERT] if no calendar account is configured.
-
-Add button (green): adds the task to the app only, no calendar event.
-
-Keyboard behaviour (WhatsApp-style)
-
-The composable uses [Modifier.imePadding] so the entire card floats above the
-
-software keyboard whenever the text field is focused — the action buttons are always
-
-visible. [ImeAction.Done] on the keyboard simply clears focus (lowers the keyboard)
-
-without submitting, so the user can still tap calendar or add.
-
-All three buttons dim to 25 % alpha when no text is present.
-
-@param onAddTask Called with the task title, difficulty string, and optional due
-
-date when the user confirms via either button.
-
-@param requestFocus When true, the text field requests focus on first composition.
-
-@param onFocusConsumed Called once after the focus request fires so the caller
-
-can reset the flag.
- */
 @OptIn(ExperimentalMaterial3Api::class, FlowPreview::class)
 @Composable
 fun AddTaskItem(
@@ -235,6 +184,10 @@ fun AddTaskItem(
     val focusManager = LocalFocusManager.current
     val focusRequester = remember { FocusRequester() }
     val permissionPrefs = remember(context) { PermissionPrefs(context) }
+    val selectedLanguage = AppLanguage.fromId(
+        context.getSharedPreferences("life_architect_prefs", android.content.Context.MODE_PRIVATE)
+            .getString("app_language", AppLanguage.SYSTEM.id)
+    )
 
     var micPermState by remember {
         mutableStateOf(
@@ -271,7 +224,6 @@ fun AddTaskItem(
     var isMicActive by remember { mutableStateOf(false) }
 
     val titleFlow = remember { MutableStateFlow("") }
-
     val speechRecognizer = remember { SpeechRecognizer.createSpeechRecognizer(context) }
 
     DisposableEffect(Unit) {
@@ -314,6 +266,7 @@ fun AddTaskItem(
                     title = text
                     titleFlow.value = text
                 }
+
                 Log.d(TAG, "SpeechRecognizer result: $text")
             }
 
@@ -374,6 +327,7 @@ fun AddTaskItem(
                 )
                 putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                 putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                selectedLanguage.speechTag?.let { putExtra(RecognizerIntent.EXTRA_LANGUAGE, it) }
             }
             speechRecognizer.startListening(intent)
         } else {
@@ -397,7 +351,11 @@ fun AddTaskItem(
         titleFlow
             .debounce(300)
             .collect { text ->
-                parseResult = if (text.isNotBlank()) DateIntentParser.parse(text) else null
+                parseResult = if (text.isNotBlank()) {
+                    DateIntentParser.parse(text, localeTag = selectedLanguage.localeTag)
+                } else {
+                    null
+                }
             }
     }
 
@@ -423,20 +381,6 @@ fun AddTaskItem(
         resetState()
     }
 
-    /**
-
-    Silently inserts a calendar event via [CalendarContract] content provider
-
-    (no app switch) and simultaneously adds the task to the app.
-
-    Strategy:
-
-    Try to find the primary calendar (IS_PRIMARY = 1).
-
-    If not found, fall back to any available calendar.
-
-    If no calendar account exists at all, fall back to [Intent.ACTION_INSERT].
-     */
     fun submitWithCalendar(dueDate: LocalDateTime) {
         if (!hasText) return
 
@@ -536,14 +480,6 @@ fun AddTaskItem(
         resetState()
     }
 
-    /**
-
-    Starts the [SpeechRecognizer] directly — no system overlay, no privacy notice.
-
-    Uses the device's default language automatically (no EXTRA_LANGUAGE needed).
-
-    Requests [Manifest.permission.RECORD_AUDIO] on first use if not already granted.
-     */
     fun startListening() {
         if (isMicActive) {
             speechRecognizer.stopListening()
@@ -567,6 +503,7 @@ fun AddTaskItem(
                     )
                     putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
                     putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                    selectedLanguage.speechTag?.let { putExtra(RecognizerIntent.EXTRA_LANGUAGE, it) }
                 }
                 speechRecognizer.startListening(intent)
             }
@@ -581,7 +518,6 @@ fun AddTaskItem(
         }
     }
 
-    /** Opens the date picker, requesting calendar permissions if needed. */
     fun openCalendarPicker() {
         if (!hasText) return
 
@@ -593,6 +529,7 @@ fun AddTaskItem(
 
         when (calPermState) {
             PermissionGateState.Granted -> showDatePicker = true
+
             PermissionGateState.RequestableFirstTime,
             PermissionGateState.RequestableWithRationale -> {
                 permissionPrefs.markRequested(Manifest.permission.WRITE_CALENDAR)
@@ -1104,16 +1041,6 @@ fun AddTaskItem(
     }
 }
 
-/**
-
-Three small circles that bounce up and down in sequence, indicating that the
-
-[SpeechRecognizer] is actively listening. Each dot is 4 dp — small enough to
-
-sit comfortably inside the 44 dp mic button alongside the existing icon style.
-
-Dots are staggered by 150 ms to create a rolling wave effect.
- */
 @Composable
 private fun RecordingDotsIndicator() {
     val infiniteTransition = rememberInfiniteTransition(label = "recordingDots")
@@ -1156,14 +1083,6 @@ private fun RecordingDotsIndicator() {
     }
 }
 
-/**
-
-A floating "Added to Calendar" confirmation popup that animates upward and fades out,
-
-matching the style of [XpPopup].
-
-@param onDismiss Called when the animation completes.
- */
 @Composable
 private fun CalendarConfirmPopup(onDismiss: () -> Unit) {
     val yOffset = remember { Animatable(0f) }

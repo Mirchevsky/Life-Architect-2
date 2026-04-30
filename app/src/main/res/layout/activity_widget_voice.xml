@@ -1,24 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-    activity_widget_voice.xml
-    ─────────────────────────────────────────────────────────────────────────
-    Layout for WidgetVoiceActivity — the mic dialog opened from the widget.
 
-    Structure:
-      ┌──────────────────────────────────────┐
-      │  Voice Input                         │  ← title
-      │  Listening…                          │  ← status label (dynamic)
-      │  ┌────────────────────────────────┐  │
-      │  │  recognised text here          │  │  ← EditText (pre-filled)
-      │  └────────────────────────────────┘  │
-      │              [🎤]                    │  ← mic button (re-record)
-      │  [Cancel]              [Save]        │  ← action buttons
-      └──────────────────────────────────────┘
-
-    Place at: app/src/main/res/layout/activity_widget_voice.xml
--->
-<LinearLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -29,7 +11,7 @@
     <TextView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Voice Input"
+        android:text="@string/voice_input"
         android:textColor="@color/widget_text_primary"
         android:textSize="18sp"
         android:textStyle="bold"
@@ -40,7 +22,7 @@
         android:id="@+id/widget_voice_status"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="Listening…"
+        android:text="@string/listening"
         android:textColor="@color/widget_text_secondary"
         android:textSize="13sp"
         android:layout_marginBottom="12dp" />
@@ -67,7 +49,7 @@
         android:layout_gravity="center_horizontal"
         android:background="@android:color/transparent"
         android:src="@drawable/widget_ic_mic"
-        android:contentDescription="Start voice input"
+        android:contentDescription="@string/start_voice_input"
         android:scaleType="centerInside"
         android:padding="8dp"
         android:layout_marginBottom="16dp" />
@@ -83,7 +65,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Cancel"
+            android:text="@string/cancel"
             android:textColor="#7C3AED"
             android:background="@android:color/transparent"
             android:layout_marginEnd="8dp" />
@@ -93,10 +75,9 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Save"
+            android:text="@string/save"
             android:textColor="#FFFFFF"
             android:backgroundTint="#7C3AED" />
 
     </LinearLayout>
-
 </LinearLayout>

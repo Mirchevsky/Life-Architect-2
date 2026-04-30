@@ -1,6 +1,9 @@
 package com.mirchevsky.lifearchitect2
 
+import android.app.LocaleManager
+import android.os.Build
 import android.os.Bundle
+import android.os.LocaleList
 import android.util.Log
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -53,17 +56,12 @@ class MainActivity : ComponentActivity() {
     private var startScreenRoute by mutableStateOf(Screen.Tasks.route)
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        // Enable edge-to-edge BEFORE super.onCreate so the window is configured
-        // before the decor is attached. This removes the empty status-bar strip and
-        // lets the app draw behind both the status bar and the system navigation bar.
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
         startScreenRoute = resolveStartScreenRoute(intent)
 
-        // Tell the window that WE handle system-bar insets (Compose will apply them).
         WindowCompat.setDecorFitsSystemWindows(window, false)
 
-        // --- AdMob: Request consent and initialize SDK ---
         consentInformation = UserMessagingPlatform.getConsentInformation(this)
 
         val params = ConsentRequestParameters.Builder()
@@ -89,24 +87,33 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+
+            SideEffect {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    val localeManager = getSystemService(LocaleManager::class.java)
+                    val locales = uiState.appLanguage.localeTag?.let {
+                        LocaleList.forLanguageTags(it)
+                    } ?: LocaleList.getEmptyLocaleList()
+
+                    localeManager?.applicationLocales = locales
+                }
+            }
+
             val systemDark = isSystemInDarkTheme()
 
             val isDarkTheme = when (uiState.themePreference) {
-                Theme.DARK   -> true
-                Theme.LIGHT  -> false
+                Theme.DARK -> true
+                Theme.LIGHT -> false
                 Theme.SYSTEM -> systemDark
             }
 
             AppTheme(darkTheme = isDarkTheme) {
-                // Match the system navigation bar colour to the app's NavigationBar
-                // background so Samsung and other OEM gesture/button bars blend in.
                 val isDark = isDarkTheme
+
                 SideEffect {
-                    // Set the system navigation bar to transparent so our
-                    // NavigationBar composable draws seamlessly over it on
-                    // all OEM devices (Samsung, OnePlus, etc.).
                     @Suppress("DEPRECATION")
                     window.navigationBarColor = android.graphics.Color.TRANSPARENT
+
                     val controller = WindowCompat.getInsetsController(window, window.decorView)
                     controller.isAppearanceLightNavigationBars = !isDark
                 }
